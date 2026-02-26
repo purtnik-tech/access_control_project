@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Система контроля доступа</title>
+    <style>
+        body { font-family: Arial; text-align: center; }
+        .video-container { display: flex; justify-content: center; gap: 20px; margin: 20px; }
+        .video-box { border: 2px solid #333; }
+        .status { margin: 20px; font-size: 1.5em; }
+        .permanent { color: green; }
+        .temporary { color: orange; }
+        .denied { color: red; }
+        .unrecognized { color: purple; }
+    </style>
+</head>
+<body>
+    <h1>Распознавание номеров и управление доступом</h1>
+    <div class="video-container">
+        <div class="video-box">
+            <h3>Live видео</h3>
+            <img src="{% url 'video_feed' %}" width="640" height="480">
+        </div>
+        <div class="video-box">
+            <h3>Последний распознанный кадр</h3>
+            <img src="{% url 'last_processed_frame' %}?t={{ timestamp }}" id="processedFrame" width="640" height="480">
+        </div>
+    </div>
+
+    <div class="status">
+        <p><strong>Распознанный номер:</strong> <span id="plate"></span></p>
+        <p><strong>Статус доступа:</strong> <span id="access"></span></p>
+    </div>
+
+    <script>
+        function updateStatus() {
+            fetch('{% url "recognition_status" %}')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('plate').innerText = data.plate || '(нет)';
+                    let accessSpan = document.getElementById('access');
+                    accessSpan.innerText = data.access || '';
+                    accessSpan.className = data.code || '';
+                    // Обновляем кадр с распознаванием (добавляем timestamp для избежания кеширования)
+                    let img = document.getElementById('processedFrame');
+                    img.src = '{% url "last_processed_frame" %}?t=' + new Date().getTime();
+                })
+                .catch(err => console.error(err));
+        }
+        setInterval(updateStatus, 2000);  // опрос каждые 2 секунды
+        updateStatus();
+    </script>
+</body>
+</html>
