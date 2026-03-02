@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
 
 class Employee(models.Model):
     login_user = models.CharField(max_length=50, primary_key=True, verbose_name="Логин")
