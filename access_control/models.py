@@ -12,6 +12,10 @@ class Employee(models.Model):
     def __str__(self):
         return f"{self.surname} {self.first_name}"
 
+    class Meta:
+        verbose_name = ('сотрудник')
+        verbose_name_plural = ('сотрудники')
+
 class Guest(models.Model):
     surname = models.CharField(max_length=50, verbose_name="Фамилия")
     first_name = models.CharField(max_length=50, verbose_name="Имя")

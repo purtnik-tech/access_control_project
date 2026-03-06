@@ -8,7 +8,7 @@ from access_control.models import LicensePlate, Employee, Guest, Pass
 from datetime import date, datetime
 
 # Создаем тестовые номера
-test_plates = ['A798AP177', 'B456EK', 'C789MH', 'X000XX']
+test_plates = ['А798АР177', 'B456EK', 'C789MH', 'X000XX']
 
 for plate in test_plates:
     LicensePlate.objects.get_or_create(plate_number=plate)
@@ -27,7 +27,7 @@ employee, _ = Employee.objects.get_or_create(
 )
 
 # Создаем пропуск для тестового номера
-plate = LicensePlate.objects.get(plate_number='A798AP177')
+plate = LicensePlate.objects.get(plate_number='А798АР177')
 Pass.objects.get_or_create(
     license_plate=plate,
     employee=employee,

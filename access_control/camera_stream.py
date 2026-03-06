@@ -1,3 +1,4 @@
+import multiprocessing
 import threading
 import time
 import cv2
@@ -5,29 +6,743 @@ import re
 import easyocr
 import torch
 import os
+import numpy as np
+import queue
+import gc
 from datetime import datetime
 from ultralytics import YOLO
-from huggingface_hub import hf_hub_download
 from .models import LicensePlate, Pass
 
 # Константы для российских номеров
-RUSSIAN_LETTERS = 'АВЕКМНОРСТУХ'  # Буквы, используемые в российских номерах
+RUSSIAN_LETTERS = 'АВЕКМНОРСТУХ'
 ALLOWED_CHARS = RUSSIAN_LETTERS + '0123456789'
+
+
+# class CameraStream:
+#     def __init__(self, camera_source=0, use_network=False, camera_id=None):
+#         if camera_id is not None:
+#             self.camera_source = camera_id
+#             self.use_network = False
+#         else:
+#             self.camera_source = camera_source
+#             self.use_network = use_network
+#
+#         self.cap = None
+#         self.stopped = False
+#         self.lock = threading.Lock()
+#         self.last_frame = None
+#         self.last_processed_frame = None
+#         self.last_plate_full = ""
+#         self.last_plate_main = ""
+#         self.last_plate_region = ""
+#         self.last_access_result = ""
+#         self.last_access_code = ""
+#         self.processing_interval = 3.0
+#         self.last_process_time = 0
+#         self.reconnect_delay = 3
+#         self.frame_count = 0
+#
+#         # ПОНИЖАЕМ ПОРОГ УВЕРЕННОСТИ для тестирования
+#         self.confidence_threshold = 0.05  # Было 0.3
+#         self.min_plate_length = 6
+#         self.max_plate_length = 9
+#
+#         self._init_yolo_model()
+#         self._init_easyocr()
+#
+#         self.last_successful_plate = ""
+#         self.last_successful_plate_full = ""
+#         self.last_successful_access = ""
+#         self.last_successful_code = ""
+#         self.last_successful_frame = None
+#         self.last_successful_time = None
+#
+#         self.recognition_history = []
+#         self.max_history = 20
+#
+#         self.processing_queue = []
+#         self.max_queue_size = 20
+#
+#         self.current_processing_frame = None
+#         self.current_processing_plate = ""
+#         self.current_processing_access = ""
+#         self.current_processing_code = "processing"
+#
+#         # Статус камеры
+#         self.camera_status = "initializing"
+#         self.last_frame_time = 0
+#         self.frame_timeout = 10
+#
+#         # Счетчики для статистики
+#         self.stats = {
+#             'total_processed': 0,
+#             'successful': 0,
+#             'permanent': 0,
+#             'temporary': 0,
+#             'denied': 0
+#         }
+#
+#     def _init_yolo_model(self):
+#         try:
+#             model_name = 'yolov8m.pt'
+#             print(f"[INFO] Загрузка модели {model_name}...")
+#             self.detector = YOLO(model_name)
+#             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#             if self.device == 'cuda':
+#                 self.detector.to('cuda')
+#                 print(f"[INFO] Модель загружена на GPU")
+#             else:
+#                 print(f"[INFO] Модель загружена на CPU")
+#         except Exception as e:
+#             print(f"[ERROR] Ошибка загрузки YOLO: {e}")
+#             self.detector = YOLO('yolov8n.pt')
+#             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#
+#     def _init_easyocr(self):
+#         try:
+#             gpu = True if torch.cuda.is_available() else False
+#             self.reader = easyocr.Reader(
+#                 ['ru', 'en'],
+#                 gpu=gpu,
+#                 model_storage_directory='~/.easyocr/model',
+#                 download_enabled=True,
+#                 verbose=False
+#             )
+#             print(f"[INFO] EasyOCR инициализирован ({'GPU' if gpu else 'CPU'})")
+#         except Exception as e:
+#             print(f"[ERROR] Ошибка инициализации EasyOCR: {e}")
+#             self.reader = None
+#
+#     def start(self):
+#         """Запуск захвата видео с камеры"""
+#         try:
+#             if self.use_network:
+#                 if 'OPENCV_FFMPEG_CAPTURE_OPTIONS' in os.environ:
+#                     del os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']
+#
+#                 print(f"[INFO] Попытка открыть камеру: {self.camera_source}")
+#                 print(f"[INFO] Пробую: Без параметров")
+#                 self.cap = cv2.VideoCapture(self.camera_source)
+#
+#                 if not self.cap.isOpened():
+#                     print(f"[INFO] Пробую: TCP")
+#                     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|timeout;5000000|stimeout;5000000"
+#                     self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
+#
+#                 if not self.cap.isOpened():
+#                     print(f"[INFO] Пробую: UDP")
+#                     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|timeout;5000000|stimeout;5000000"
+#                     self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
+#             else:
+#                 self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_DSHOW)
+#                 if not self.cap.isOpened():
+#                     self.cap = cv2.VideoCapture(self.camera_source)
+#
+#             if not self.cap.isOpened():
+#                 self.camera_status = "error"
+#                 raise RuntimeError("Не удалось открыть камеру")
+#
+#             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+#             self.cap.set(cv2.CAP_PROP_FPS, 10)
+#
+#             actual_w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+#             actual_h = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+#             actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
+#
+#             print(f"[INFO] ✅ Камера успешно открыта")
+#             print(f"[INFO] Разрешение: {actual_w} x {actual_h}, FPS: {actual_fps}")
+#
+#             self.camera_status = "ok"
+#             self.stopped = False
+#             self.thread = threading.Thread(target=self._update)
+#             self.thread.daemon = True
+#             self.thread.start()
+#             print(f"[INFO] Поток обработки запущен")
+#
+#             def force_processing():
+#                 time.sleep(2)
+#                 print("[INFO] Принудительный запуск обработки...")
+#                 self.last_process_time = 0
+#
+#             force_thread = threading.Thread(target=force_processing)
+#             force_thread.daemon = True
+#             force_thread.start()
+#
+#         except Exception as e:
+#             print(f"[ERROR] Ошибка при открытии камеры: {e}")
+#             self.camera_status = "error"
+#             raise
+#
+#         return self
+#
+#     def _update(self):
+#         """Оптимизированный поток захвата и обработки кадров"""
+#         reconnect_attempts = 0
+#         max_reconnect_attempts = 5
+#         consecutive_errors = 0
+#         max_consecutive_errors = 5
+#         frame_counter = 0
+#         last_processing_time = 0
+#         last_frame_time = time.time()
+#         frame_timeout = 10
+#
+#         print("[INFO] _update поток запущен")
+#
+#         while not self.stopped:
+#             try:
+#                 current_time = time.time()
+#
+#                 if self.cap is None or not self.cap.isOpened():
+#                     self.camera_status = "reconnecting"
+#
+#                     if reconnect_attempts >= max_reconnect_attempts:
+#                         print(f"[ERROR] Превышено число попыток переподключения")
+#                         time.sleep(30)
+#                         reconnect_attempts = 0
+#                         continue
+#
+#                     reconnect_attempts += 1
+#                     print(f"[WARN] Переподключение {reconnect_attempts}/{max_reconnect_attempts}")
+#                     time.sleep(min(10, reconnect_attempts * 2))
+#
+#                     if self.use_network:
+#                         if 'OPENCV_FFMPEG_CAPTURE_OPTIONS' in os.environ:
+#                             del os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']
+#                         self.cap = cv2.VideoCapture(self.camera_source)
+#                     else:
+#                         self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_DSHOW)
+#
+#                     if self.cap and self.cap.isOpened():
+#                         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+#                         self.cap.set(cv2.CAP_PROP_FPS, 10)
+#                         print(f"[INFO] ✅ Переподключение успешно")
+#                         self.camera_status = "ok"
+#                         reconnect_attempts = 0
+#                         consecutive_errors = 0
+#                         last_frame_time = time.time()
+#
+#                     continue
+#
+#                 ret, frame = self.cap.read()
+#
+#                 if not ret:
+#                     consecutive_errors += 1
+#                     print(f"[WARN] Ошибка чтения кадра #{consecutive_errors}")
+#
+#                     if consecutive_errors >= max_consecutive_errors:
+#                         print(f"[WARN] Слишком много ошибок, переподключаюсь...")
+#                         self.cap.release()
+#                         self.cap = None
+#                         consecutive_errors = 0
+#
+#                     time.sleep(0.1)
+#                     continue
+#
+#                 consecutive_errors = 0
+#                 reconnect_attempts = 0
+#                 frame_counter += 1
+#                 self.frame_count = frame_counter
+#                 last_frame_time = current_time
+#
+#                 with self.lock:
+#                     self.last_frame = frame.copy()
+#
+#                 if current_time - last_frame_time > frame_timeout:
+#                     print(f"[WARN] Нет кадров {frame_timeout} сек, переподключаюсь...")
+#                     self.cap.release()
+#                     self.cap = None
+#                     continue
+#
+#                 time_since_last = current_time - last_processing_time
+#
+#                 should_process = (
+#                         frame_counter <= 10 or
+#                         frame_counter % 5 == 0 or
+#                         time_since_last > self.processing_interval or
+#                         (frame_counter > 10 and time_since_last > 3)
+#                 )
+#
+#                 if should_process:
+#                     last_processing_time = current_time
+#
+#                     process_thread = threading.Thread(
+#                         target=self._process_frame_async,
+#                         args=(frame.copy(), frame_counter),
+#                         daemon=True
+#                     )
+#                     process_thread.start()
+#
+#                     if frame_counter % 10 == 0:
+#                         print(f"[INFO] Запущена обработка кадра #{frame_counter}")
+#
+#             except Exception as e:
+#                 print(f"[ERROR] Исключение в _update: {e}")
+#                 import traceback
+#                 traceback.print_exc()
+#                 time.sleep(0.5)
+#
+#     def _process_frame_async(self, frame, frame_counter):
+#         """Асинхронная обработка кадра с обновлением статистики"""
+#         try:
+#             h, w = frame.shape[:2]
+#             small_frame = cv2.resize(frame, (w // 2, h // 2))
+#
+#             with self.lock:
+#                 self.current_processing_frame = frame.copy()
+#                 self.current_processing_plate = "обработка..."
+#                 self.current_processing_access = "..."
+#                 self.current_processing_code = "processing"
+#
+#             plate_info = self._recognize_plate_yolo_easyocr(small_frame)
+#
+#             if plate_info.get('bbox'):
+#                 x1, y1, x2, y2 = plate_info['bbox']
+#                 plate_info['bbox'] = (x1 * 2, y1 * 2, x2 * 2, y2 * 2)
+#
+#             plate_full = plate_info.get('full', '')
+#             plate_main = plate_info.get('main', '')
+#             plate_region = plate_info.get('region', '')
+#             confidence = plate_info.get('confidence', 0.0)
+#             plate_rect = plate_info.get('bbox', None)
+#
+#             access_result, access_code = self._check_access(plate_full, plate_main)
+#
+#             # Обновляем статистику
+#             with self.lock:
+#                 self.stats['total_processed'] += 1
+#
+#                 if access_code == 'permanent':
+#                     self.stats['permanent'] += 1
+#                     self.stats['successful'] += 1
+#                 elif access_code == 'temporary':
+#                     self.stats['temporary'] += 1
+#                     self.stats['successful'] += 1
+#                 elif access_code == 'denied':
+#                     self.stats['denied'] += 1
+#
+#             processed_frame = frame.copy()
+#
+#             if plate_rect:
+#                 x1, y1, x2, y2 = plate_rect
+#                 color = (0, 255, 0) if access_code in ['permanent', 'temporary'] else (0, 0, 255)
+#
+#                 cv2.rectangle(processed_frame, (x1, y1), (x2, y2), color, 2)
+#
+#                 if plate_full:
+#                     text = f"{plate_full}"
+#                     cv2.putText(processed_frame, text, (x1, y1 - 5),
+#                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+#
+#             status_color = self._get_color_for_code(access_code)
+#             cv2.putText(processed_frame, f"{access_result[:15]}", (5, 25),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, status_color, 1)
+#
+#             cv2.putText(processed_frame, datetime.now().strftime('%H:%M:%S'), (5, 45),
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+#
+#             with self.lock:
+#                 self.last_processed_frame = processed_frame
+#                 self.last_plate_full = plate_full
+#                 self.last_plate_main = plate_main
+#                 self.last_plate_region = plate_region
+#                 self.last_access_result = access_result
+#                 self.last_access_code = access_code
+#
+#                 if frame_counter % 2 == 0:
+#                     queue_entry = {
+#                         'plate': plate_full,
+#                         'plate_main': plate_main,
+#                         'plate_region': plate_region,
+#                         'access': access_result,
+#                         'code': access_code,
+#                         'confidence': round(confidence, 2),
+#                         'timestamp': datetime.now().strftime('%H:%M:%S'),
+#                     }
+#
+#                     self.processing_queue.append(queue_entry)
+#                     if len(self.processing_queue) > self.max_queue_size:
+#                         self.processing_queue.pop(0)
+#
+#                 # В историю добавляем ВСЕ распознанные номера для тестирования
+#                 if plate_full:
+#                     history_entry = {
+#                         'plate': plate_full,
+#                         'plate_main': plate_main,
+#                         'plate_region': plate_region,
+#                         'access': access_result,
+#                         'code': access_code,
+#                         'confidence': round(confidence, 2),
+#                         'time': datetime.now().strftime('%H:%M:%S'),
+#                     }
+#
+#                     self.recognition_history.append(history_entry)
+#                     if len(self.recognition_history) > self.max_history:
+#                         self.recognition_history.pop(0)
+#
+#                     print(f"[INFO] Добавлено в историю: {plate_full} (увер:{confidence:.2f})")
+#
+#             if plate_full:
+#                 print(f"[INFO] Кадр #{frame_counter}: {plate_full} (увер:{confidence:.2f}, стат:{access_code})")
+#
+#         except Exception as e:
+#             print(f"[ERROR] Ошибка в _process_frame_async: {e}")
+#             import traceback
+#             traceback.print_exc()
+#
+#     def _recognize_plate_yolo_easyocr(self, frame):
+#         """Оптимизированное распознавание номера"""
+#         result = {
+#             'full': '', 'main': '', 'region': '',
+#             'confidence': 0.0, 'bbox': None
+#         }
+#
+#         try:
+#             if frame is None or self.detector is None:
+#                 return result
+#
+#             h, w = frame.shape[:2]
+#             if w > 640 or h > 480:
+#                 scale = min(640 / w, 480 / h)
+#                 new_w, new_h = int(w * scale), int(h * scale)
+#                 processed_frame = cv2.resize(frame, (new_w, new_h))
+#                 scale_factor = scale
+#             else:
+#                 processed_frame = frame
+#                 scale_factor = 1.0
+#
+#             results = self.detector(
+#                 processed_frame,
+#                 conf=0.2,
+#                 iou=0.3,
+#                 max_det=5,
+#                 verbose=False
+#             )
+#
+#             best_plate = None
+#             best_bbox = None
+#             best_confidence = 0.0
+#
+#             for r in results:
+#                 if r.boxes is None:
+#                     continue
+#
+#                 for box in r.boxes:
+#                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+#                     det_conf = float(box.conf[0])
+#
+#                     if scale_factor != 1.0:
+#                         x1 = int(x1 / scale_factor)
+#                         y1 = int(y1 / scale_factor)
+#                         x2 = int(x2 / scale_factor)
+#                         y2 = int(y2 / scale_factor)
+#
+#                     padding = 5
+#                     h_orig, w_orig = frame.shape[:2]
+#                     x1 = max(0, x1 - padding)
+#                     y1 = max(0, y1 - padding)
+#                     x2 = min(w_orig, x2 + padding)
+#                     y2 = min(h_orig, y2 + padding)
+#
+#                     plate_crop = frame[y1:y2, x1:x2]
+#                     if plate_crop.size == 0:
+#                         continue
+#
+#                     ocr_results = []
+#
+#                     enlarged = cv2.resize(plate_crop, None, fx=2, fy=2)
+#                     gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
+#                     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+#                     enhanced = clahe.apply(gray)
+#
+#                     res1 = self._fast_ocr(enhanced)
+#                     if res1:
+#                         ocr_results.append(res1)
+#
+#                     _, binary = cv2.threshold(gray, 0, 255,
+#                                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+#                     res2 = self._fast_ocr(binary)
+#                     if res2:
+#                         ocr_results.append(res2)
+#
+#                     if not ocr_results:
+#                         res3 = self._fast_ocr(gray)
+#                         if res3:
+#                             ocr_results.append(res3)
+#
+#                     if ocr_results:
+#                         best_ocr = max(ocr_results, key=lambda x: x['confidence'])
+#
+#                         text = best_ocr['text']
+#                         ocr_conf = best_ocr['confidence']
+#
+#                         parsed = self._parse_russian_plate(text)
+#
+#                         if parsed['full']:
+#                             combined_conf = det_conf * ocr_conf
+#
+#                             if parsed['region']:
+#                                 combined_conf *= 1.2
+#                                 combined_conf = min(combined_conf, 1.0)
+#
+#                             length_bonus = min(1.3, 1.0 + len(parsed['full']) * 0.05)
+#                             combined_conf *= length_bonus
+#                             combined_conf = min(combined_conf, 1.0)
+#
+#                             if combined_conf > best_confidence:
+#                                 best_confidence = combined_conf
+#                                 best_bbox = (x1, y1, x2, y2)
+#                                 best_plate = parsed
+#
+#             if best_plate and best_confidence > 0:
+#                 result.update({
+#                     'full': best_plate['full'],
+#                     'main': best_plate['main'],
+#                     'region': best_plate['region'],
+#                     'confidence': best_confidence,
+#                     'bbox': best_bbox
+#                 })
+#
+#             return result
+#
+#         except Exception as e:
+#             return result
+#
+#     def _fast_ocr(self, img):
+#         """Быстрое OCR для одного изображения"""
+#         try:
+#             if self.reader is None:
+#                 return None
+#
+#             results = self.reader.readtext(
+#                 img,
+#                 allowlist=ALLOWED_CHARS,
+#                 paragraph=False,
+#                 low_text=0.3,
+#                 text_threshold=0.5,
+#                 width_ths=0.5,
+#                 height_ths=0.3,
+#                 ycenter_ths=0.3,
+#                 decoder='greedy',
+#                 beamWidth=5,
+#                 batch_size=1,
+#                 workers=1
+#             )
+#
+#             if results:
+#                 full_text = ''.join([r[1] for r in results])
+#                 avg_conf = sum([r[2] for r in results]) / len(results)
+#
+#                 clean_text = re.sub(r'[^A-Z0-9А-Я]', '', full_text).upper()
+#
+#                 if clean_text:
+#                     return {
+#                         'text': clean_text,
+#                         'confidence': avg_conf
+#                     }
+#
+#             return None
+#
+#         except Exception as e:
+#             return None
+#
+#     def _parse_russian_plate(self, text):
+#         """Парсинг российского автомобильного номера"""
+#         if not text or len(text) < 6:
+#             return {'full': '', 'main': '', 'region': ''}
+#
+#         clean_text = re.sub(r'[^A-Z0-9А-Я]', '', text).upper()
+#
+#         main_pattern = r'([' + RUSSIAN_LETTERS + r'])(\d{3})([' + RUSSIAN_LETTERS + r']{2})'
+#         main_match = re.search(main_pattern, clean_text)
+#
+#         if main_match:
+#             main_part = main_match.group(0)
+#             remaining = clean_text[main_match.end():]
+#
+#             region_match = re.search(r'(\d{2,3})', remaining)
+#
+#             if region_match:
+#                 region = region_match.group(0)
+#                 try:
+#                     region_int = int(region)
+#                     if 1 <= region_int <= 999:
+#                         return {
+#                             'full': main_part + region,
+#                             'main': main_part,
+#                             'region': region
+#                         }
+#                 except:
+#                     pass
+#
+#             return {
+#                 'full': main_part,
+#                 'main': main_part,
+#                 'region': ''
+#             }
+#
+#         letters = [c for c in clean_text if c in RUSSIAN_LETTERS]
+#         digits = [c for c in clean_text if c.isdigit()]
+#
+#         if len(letters) >= 3 and len(digits) >= 5:
+#             main_letters = letters[:3]
+#             main_digits = digits[:3]
+#             region_digits = digits[3:6] if len(digits) >= 6 else digits[3:5]
+#
+#             if len(main_letters) == 3 and len(main_digits) == 3:
+#                 main_part = main_letters[0] + ''.join(main_digits) + ''.join(main_letters[1:3])
+#                 region = ''.join(region_digits) if region_digits else ''
+#
+#                 if re.match(main_pattern, main_part):
+#                     return {
+#                         'full': main_part + region,
+#                         'main': main_part,
+#                         'region': region
+#                     }
+#
+#         return {'full': '', 'main': '', 'region': ''}
+#
+#     def _check_access(self, plate_full, plate_main):
+#         """Проверка доступа по номеру"""
+#         if not plate_full and not plate_main:
+#             return "Номер не распознан", "unrecognized"
+#
+#         def normalize(p):
+#             return re.sub(r'[^A-Z0-9А-Я]', '', p).upper() if p else ""
+#
+#         if plate_full:
+#             try:
+#                 lp = LicensePlate.objects.get(plate_number=normalize(plate_full))
+#                 return self._check_pass(lp)
+#             except:
+#                 pass
+#
+#         if plate_main:
+#             try:
+#                 lp = LicensePlate.objects.get(plate_number=normalize(plate_main))
+#                 return self._check_pass(lp)
+#             except:
+#                 pass
+#
+#         return "Доступ запрещён", "denied"
+#
+#     def _check_pass(self, lp):
+#         """Проверка пропуска"""
+#         try:
+#             passes = Pass.objects.filter(
+#                 license_plate=lp,
+#                 start_date__lte=datetime.now().date()
+#             )
+#
+#             if not passes.exists():
+#                 return "Доступ запрещён", "denied"
+#
+#             p = passes.first()
+#             if p.pass_type == 'permanent':
+#                 return "Постоянный, въезд разрешён", "permanent"
+#             else:
+#                 if p.end_date and p.end_date >= datetime.now().date():
+#                     return "Временный, ручной контроль", "temporary"
+#                 return "Доступ запрещён", "denied"
+#         except:
+#             return "Ошибка проверки", "error"
+#
+#     def _get_color_for_code(self, code):
+#         """Возвращает цвет BGR для статуса доступа"""
+#         colors = {
+#             'permanent': (0, 255, 0),
+#             'temporary': (0, 255, 255),
+#             'denied': (0, 0, 255),
+#             'unrecognized': (128, 128, 128),
+#             'error': (255, 0, 255),
+#             'processing': (255, 255, 0)
+#         }
+#         return colors.get(code, (255, 255, 255))
+#
+#     def get_frame(self):
+#         with self.lock:
+#             if self.last_frame is None:
+#                 return None
+#             ret, jpeg = cv2.imencode('.jpg', self.last_frame)
+#             return jpeg.tobytes() if ret else None
+#
+#     def get_processed_frame(self):
+#         with self.lock:
+#             if self.last_processed_frame is None:
+#                 return None
+#             ret, jpeg = cv2.imencode('.jpg', self.last_processed_frame)
+#             return jpeg.tobytes() if ret else None
+#
+#     def get_status(self):
+#         with self.lock:
+#             return {
+#                 'plate': self.last_plate_full,
+#                 'plate_main': self.last_plate_main,
+#                 'plate_region': self.last_plate_region,
+#                 'access': self.last_access_result,
+#                 'code': self.last_access_code
+#             }
+#
+#     def get_last_successful(self):
+#         with self.lock:
+#             if self.last_successful_frame is None:
+#                 return None
+#             ret, jpeg = cv2.imencode('.jpg', self.last_successful_frame)
+#             if not ret:
+#                 return None
+#             return {
+#                 'frame': jpeg.tobytes(),
+#                 'plate': self.last_successful_plate_full,
+#                 'access': self.last_successful_access,
+#                 'code': self.last_successful_code,
+#                 'time': self.last_successful_time.strftime('%H:%M:%S') if self.last_successful_time else None
+#             }
+#
+#     def get_recognition_history(self):
+#         with self.lock:
+#             return self.recognition_history.copy()
+#
+#     def get_current_processing(self):
+#         with self.lock:
+#             if self.current_processing_frame is None:
+#                 return None
+#             ret, jpeg = cv2.imencode('.jpg', self.current_processing_frame)
+#             if not ret:
+#                 return None
+#             return {
+#                 'frame': jpeg.tobytes(),
+#                 'plate': self.current_processing_plate,
+#                 'access': self.current_processing_access,
+#                 'code': self.current_processing_code
+#             }
+#
+#     def get_processing_queue(self):
+#         with self.lock:
+#             return [{
+#                 'plate': e['plate'],
+#                 'plate_main': e.get('plate_main', ''),
+#                 'plate_region': e.get('plate_region', ''),
+#                 'access': e['access'],
+#                 'code': e['code'],
+#                 'confidence': e['confidence'],
+#                 'timestamp': e['timestamp']
+#             } for e in self.processing_queue[-15:]]
+#
+#     def get_stats(self):
+#         """Получение статистики распознаваний"""
+#         with self.lock:
+#             return self.stats.copy()
+#
+#     def stop(self):
+#         self.stopped = True
+#         if self.cap:
+#             self.cap.release()
 
 
 class CameraStream:
     def __init__(self, camera_source=0, use_network=False, camera_id=None):
-        """
-        camera_source: для локальной камеры - индекс (0, 1...)
-                      для сетевой камеры - URL (строка)
-        use_network: True для сетевой камеры, False для локальной
-        camera_id: для обратной совместимости
-        """
-        # Для обратной совместимости
         if camera_id is not None:
             self.camera_source = camera_id
             self.use_network = False
-            print(f"[DEBUG] Используется устаревший параметр camera_id={camera_id}")
         else:
             self.camera_source = camera_source
             self.use_network = use_network
@@ -37,29 +752,35 @@ class CameraStream:
         self.lock = threading.Lock()
         self.last_frame = None
         self.last_processed_frame = None
-        self.last_plate = ""
-        self.last_plate_full = ""  # Полный номер с регионом
-        self.last_plate_main = ""  # Основная часть номера (без региона)
-        self.last_plate_region = ""  # Только регион
+        self.last_plate_full = ""
+        self.last_plate_main = ""
+        self.last_plate_region = ""
         self.last_access_result = ""
         self.last_access_code = ""
-        self.processing_interval = 2.0  # Интервал распознавания (секунды)
+        self.processing_interval = 3.0
         self.last_process_time = 0
-        self.reconnect_delay = 5
+        self.reconnect_delay = 3
         self.frame_count = 0
 
-        # Порог уверенности для записи в историю
-        self.confidence_threshold = 0.7  # Номера с уверенностью ниже этого не записываются
-        self.min_plate_length = 6  # Минимальная длина номера (A123BC = 6 символов)
-        self.max_plate_length = 9  # Максимальная длина (A123BC45 = 8, A123BC456 = 9)
+        # ПОНИЖАЕМ ПОРОГ УВЕРЕННОСТИ для тестирования
+        self.confidence_threshold = 0.0
+        self.min_plate_length = 6
+        self.max_plate_length = 9
 
-        # Инициализация YOLO для детекции номеров
+        # Очередь для обработки кадров (ограничиваем размер)
+        self.frame_queue = queue.Queue(maxsize=5)
+
+        # Пул потоков обработчиков
+        self.num_workers = 2  # Ограничиваем количество параллельных обработчиков
+        self.worker_threads = []
+        self.worker_semaphore = threading.Semaphore(self.num_workers)
+
+        # Событие для остановки воркеров
+        self.stop_workers = threading.Event()
+
         self._init_yolo_model()
-
-        # Инициализация EasyOCR для распознавания
         self._init_easyocr()
 
-        # Атрибуты для истории успешного распознавания
         self.last_successful_plate = ""
         self.last_successful_plate_full = ""
         self.last_successful_access = ""
@@ -67,331 +788,586 @@ class CameraStream:
         self.last_successful_frame = None
         self.last_successful_time = None
 
-        # Для хранения истории последних распознаваний
-        self.recognition_history = []  # список последних 10 записей
-        self.max_history = 10
+        self.recognition_history = []
+        self.max_history = 15  # Уменьшаем для экономии памяти
+
+        self.processing_queue = []
+        self.max_queue_size = 10  # Уменьшаем для экономии памяти
+
+        self.current_processing_frame = None
+        self.current_processing_plate = ""
+        self.current_processing_access = ""
+        self.current_processing_code = "processing"
+
+        # Статус камеры
+        self.camera_status = "initializing"
+        self.last_frame_time = 0
+        self.frame_timeout = 10
+
+        # Счетчики для статистики
+        self.stats = {
+            'total_processed': 0,
+            'successful': 0,
+            'permanent': 0,
+            'temporary': 0,
+            'denied': 0
+        }
 
     def _init_yolo_model(self):
-        """Инициализация YOLO модели для детекции номеров"""
         try:
-            print("[DEBUG] Загрузка YOLO модели для детекции номеров...")
-
-            # Скачиваем специализированную модель для номеров с Hugging Face
-            model_path = hf_hub_download(
-                repo_id="0xnu/european-license-plate-recognition",
-                filename="yolov12n_plate_detection.pt",
-                repo_type="model"
-            )
-
-            # Загружаем модель YOLO
-            self.detector = YOLO(model_path)
-
-            # Определяем устройство (GPU если доступно)
+            model_name = 'yolov8m.pt'
+            print(f"[INFO] Загрузка модели {model_name}...")
+            self.detector = YOLO(model_name)
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            print(f"[DEBUG] YOLO модель загружена. Устройство: {self.device}")
-
             if self.device == 'cuda':
                 self.detector.to('cuda')
-
+                print(f"[INFO] Модель загружена на GPU")
+                # Очищаем кэш CUDA после загрузки
+                torch.cuda.empty_cache()
+            else:
+                print(f"[INFO] Модель загружена на CPU")
         except Exception as e:
-            print(f"[DEBUG] Ошибка загрузки YOLO модели: {e}")
-            print("[DEBUG] Загружаю стандартную модель YOLOv8n...")
+            print(f"[ERROR] Ошибка загрузки YOLO: {e}")
             self.detector = YOLO('yolov8n.pt')
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def _init_easyocr(self):
-        """Инициализация EasyOCR для распознавания текста"""
         try:
-            print("[DEBUG] Инициализация EasyOCR...")
             gpu = True if torch.cuda.is_available() else False
             self.reader = easyocr.Reader(
                 ['ru', 'en'],
                 gpu=gpu,
                 model_storage_directory='~/.easyocr/model',
-                download_enabled=True
+                download_enabled=True,
+                verbose=False
             )
-            print(f"[DEBUG] EasyOCR инициализирован. GPU: {gpu}")
+            print(f"[INFO] EasyOCR инициализирован ({'GPU' if gpu else 'CPU'})")
         except Exception as e:
-            print(f"[DEBUG] Ошибка инициализации EasyOCR: {e}")
+            print(f"[ERROR] Ошибка инициализации EasyOCR: {e}")
             self.reader = None
 
     def start(self):
-        """Запуск захвата видео с камеры с улучшенной обработкой RTSP"""
-        print(f"[DEBUG] Попытка открыть камеру: {self.camera_source}")
-        print(f"[DEBUG] Тип подключения: {'Сетевая' if self.use_network else 'Локальная'}")
-
+        """Запуск захвата видео с камеры"""
         try:
             if self.use_network:
-                # Расширенные параметры для RTSP
-                rtsp_params = (
-                    "rtsp_transport;tcp|"  # TCP надежнее UDP
-                    "max_delay;0|"  # Минимальная задержка
-                    "buffer_size;1024000|"  # Буфер 1MB
-                    "reorder_queue_size;0|"  # Не переупорядочивать кадры
-                    "fflags;nobuffer|"  # Отключить буферизацию
-                    "flags;low_delay|"  # Низкая задержка
-                    "timeout;5000000|"  # Таймаут 5 секунд (в микросекундах)
-                    "stimeout;5000000"  # Таймаут сокета 5 секунд
-                )
-                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = rtsp_params
+                try:
+                    print(f'OPENCV_FFMPEG_CAPTURE_OPTIONS: {os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']}')
+                    if 'OPENCV_FFMPEG_CAPTURE_OPTIONS' in os.environ:
+                        del os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']
+                except KeyError as e:
+                    print(f'--> {e}')
 
-                # Пробуем разные бэкенды
-                backends = [
-                    (cv2.CAP_FFMPEG, "FFMPEG"),
-                    (cv2.CAP_ANY, "ANY"),
-                    (None, "DEFAULT")
-                ]
+                print(f"[INFO] Попытка открыть камеру: {self.camera_source}")
+                print(f"[INFO] Пробую: Без параметров")
+                self.cap = cv2.VideoCapture(self.camera_source)
+                print(f'camera_source: {self.camera_source}')
+                print(f'cap: {self.cap}')
+                if not self.cap.isOpened():
+                    print(f"[INFO] Пробую: TCP")
+                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|timeout;5000000|stimeout;5000000"
+                    self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
 
-                for backend, name in backends:
-                    try:
-                        if backend is not None:
-                            print(f"[DEBUG] Пробую бэкенд: {name}")
-                            self.cap = cv2.VideoCapture(self.camera_source, backend)
-                        else:
-                            print(f"[DEBUG] Пробую бэкенд: DEFAULT")
-                            self.cap = cv2.VideoCapture(self.camera_source)
-
-                        if self.cap.isOpened():
-                            print(f"[DEBUG] Бэкенд {name} успешно открыл камеру")
-                            break
-                    except Exception as e:
-                        print(f"[DEBUG] Бэкенд {name} не сработал: {e}")
-                        continue
-
-                if not self.cap or not self.cap.isOpened():
-                    raise RuntimeError("Не удалось открыть камеру ни одним бэкендом")
-
-                # Устанавливаем параметры для стабильной работы
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Минимальный буфер
-                self.cap.set(cv2.CAP_PROP_FPS, 15)  # Ограничиваем FPS для стабильности
-
-                # Устанавливаем таймаут чтения
-                self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)  # 5 секунд
-                self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)  # 5 секунд
-
+                if not self.cap.isOpened():
+                    print(f"[INFO] Пробую: UDP")
+                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;udp|timeout;5000000|stimeout;5000000"
+                    self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
             else:
-                # Для локальной камеры
                 self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_DSHOW)
                 if not self.cap.isOpened():
-                    print("[DEBUG] DSHOW не сработал, пробую стандартный бэкенд")
                     self.cap = cv2.VideoCapture(self.camera_source)
 
             if not self.cap.isOpened():
-                raise RuntimeError(f"Не удалось открыть камеру: {self.camera_source}")
+                self.camera_status = "error"
+                raise RuntimeError("Не удалось открыть камеру")
 
-            print("[DEBUG] Камера успешно открыта")
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self.cap.set(cv2.CAP_PROP_FPS, 10)
 
-            # Получаем реальные параметры
             actual_w = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
             actual_h = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
             actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
-            print(f"[DEBUG] Реальное разрешение: {actual_w} x {actual_h}, FPS: {actual_fps}")
 
+            print(f"[INFO] ✅ Камера успешно открыта")
+            print(f"[INFO] Разрешение: {actual_w} x {actual_h}, FPS: {actual_fps}")
+
+            self.camera_status = "ok"
             self.stopped = False
-            self.thread = threading.Thread(target=self._update, args=())
+            self.stop_workers.clear()
+
+            # Запускаем основной поток захвата
+            self.thread = threading.Thread(target=self._update)
             self.thread.daemon = True
             self.thread.start()
-            print("[DEBUG] Фоновый поток запущен")
+
+            # Запускаем пул воркеров для обработки
+            for i in range(self.num_workers):
+                worker = threading.Thread(target=self._worker_process)
+                worker.daemon = True
+                worker.start()
+                self.worker_threads.append(worker)
+
+            print(f"[INFO] Поток захвата и {self.num_workers} воркеров запущены")
+
+            def force_processing():
+                time.sleep(2)
+                self.last_process_time = 0
+
+            force_thread = threading.Thread(target=force_processing)
+            force_thread.daemon = True
+            force_thread.start()
 
         except Exception as e:
-            print(f"[DEBUG] Ошибка при открытии камеры: {e}")
+            print(f"[ERROR] Ошибка при открытии камеры: {e}")
+            self.camera_status = "error"
             raise
 
         return self
 
+    def _worker_process(self):
+        """Воркер для обработки кадров из очереди"""
+        while not self.stop_workers.is_set():
+            try:
+                # Получаем кадр из очереди с таймаутом
+                frame_data = self.frame_queue.get(timeout=1)
+                if frame_data is None:
+                    continue
+
+                frame, frame_counter = frame_data
+
+                # Используем семафор для ограничения параллельных обработок
+                with self.worker_semaphore:
+                    self._process_frame_async(frame, frame_counter)
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                print(f"[ERROR] Ошибка в воркере: {e}")
+
     def _update(self):
-        """Фоновый поток захвата и обработки кадров с улучшенной обработкой RTSP"""
-        print("[DEBUG] _update thread started")
+        """Оптимизированный поток захвата и обработки кадров"""
         reconnect_attempts = 0
+        max_reconnect_attempts = 5
         consecutive_errors = 0
         max_consecutive_errors = 5
-        last_reconnect_time = 0
-        reconnect_cooldown = 10  # Минимальное время между переподключениями (секунд)
+        frame_counter = 0
+        last_processing_time = 0
+        last_frame_time = time.time()
+        frame_timeout = 10
+
+        print("[INFO] _update поток запущен")
 
         while not self.stopped:
             try:
                 current_time = time.time()
 
-                # Проверка состояния камеры
                 if self.cap is None or not self.cap.isOpened():
-                    # Проверяем, не слишком ли часто пытаемся переподключиться
-                    if current_time - last_reconnect_time < reconnect_cooldown:
-                        time.sleep(1)
+                    self.camera_status = "reconnecting"
+
+                    if reconnect_attempts >= max_reconnect_attempts:
+                        print(f"[ERROR] Превышено число попыток переподключения")
+                        time.sleep(30)
+                        reconnect_attempts = 0
                         continue
 
-                    print(f"[DEBUG] Камера не открыта, попытка переподключения {reconnect_attempts + 1}")
-                    last_reconnect_time = current_time
+                    reconnect_attempts += 1
+                    print(f"[WARN] Переподключение {reconnect_attempts}/{max_reconnect_attempts}")
+                    time.sleep(min(10, reconnect_attempts * 2))
 
-                    # Экспоненциальная задержка между попытками
-                    delay = min(30, 5 * (reconnect_attempts + 1))
-                    print(f"[DEBUG] Ожидание {delay} секунд перед переподключением...")
-                    time.sleep(delay)
-
-                    # Пробуем переподключиться
                     if self.use_network:
-                        # Восстанавливаем параметры RTSP
-                        rtsp_params = (
-                            "rtsp_transport;tcp|"
-                            "max_delay;0|"
-                            "buffer_size;1024000|"
-                            "reorder_queue_size;0|"
-                            "fflags;nobuffer|"
-                            "flags;low_delay|"
-                            "timeout;5000000|"
-                            "stimeout;5000000"
-                        )
-                        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = rtsp_params
-
-                        self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_FFMPEG)
-                        if self.cap.isOpened():
-                            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                            self.cap.set(cv2.CAP_PROP_FPS, 15)
-                            print("[DEBUG] Переподключение успешно")
-                            reconnect_attempts = 0
-                        else:
-                            reconnect_attempts += 1
+                        if 'OPENCV_FFMPEG_CAPTURE_OPTIONS' in os.environ:
+                            del os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']
+                        self.cap = cv2.VideoCapture(self.camera_source)
                     else:
                         self.cap = cv2.VideoCapture(self.camera_source, cv2.CAP_DSHOW)
-                        if self.cap.isOpened():
-                            print("[DEBUG] Переподключение успешно")
-                            reconnect_attempts = 0
-                        else:
-                            reconnect_attempts += 1
+
+                    if self.cap and self.cap.isOpened():
+                        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        self.cap.set(cv2.CAP_PROP_FPS, 10)
+                        print(f"[INFO] ✅ Переподключение успешно")
+                        self.camera_status = "ok"
+                        reconnect_attempts = 0
+                        consecutive_errors = 0
+                        last_frame_time = time.time()
 
                     continue
 
-                # Читаем кадр с таймаутом
                 ret, frame = self.cap.read()
-
+                # print(f'ret,{type(ret), ret}')
+                # print(f'frame: {type(frame), frame}')
                 if not ret:
                     consecutive_errors += 1
-                    print(f"[DEBUG] Не удалось прочитать кадр (ошибка #{consecutive_errors})")
+                    print(f"[WARN] Ошибка чтения кадра #{consecutive_errors}")
 
-                    if consecutive_errors > max_consecutive_errors:
-                        print("[DEBUG] Слишком много ошибок, переподключаюсь...")
+                    if consecutive_errors >= max_consecutive_errors:
+                        print(f"[WARN] Слишком много ошибок, переподключаюсь...")
                         self.cap.release()
                         self.cap = None
                         consecutive_errors = 0
 
-                    time.sleep(0.5)
+                    time.sleep(0.1)
                     continue
 
-                # Сброс счетчиков при успешном чтении
                 consecutive_errors = 0
-                self.frame_count += 1
+                reconnect_attempts = 0
+                frame_counter += 1
+                self.frame_count = frame_counter
+                last_frame_time = current_time
 
-                if self.frame_count % 30 == 0:
-                    print(f"[DEBUG] Получено кадров: {self.frame_count}")
-
-                # Сохраняем текущий кадр для live просмотра
                 with self.lock:
-                    self.last_frame = frame.copy()
+                    # Сохраняем только уменьшенную копию для last_frame
+                    if frame_counter % 3 == 0:
+                        self.last_frame = frame.copy()
 
-                # Периодическое распознавание номеров
-                if current_time - self.last_process_time > self.processing_interval:
-                    self.last_process_time = current_time
+                if current_time - last_frame_time > frame_timeout:
+                    print(f"[WARN] Нет кадров {frame_timeout} сек, переподключаюсь...")
+                    self.cap.release()
+                    self.cap = None
+                    continue
 
-                    # Создаем копию для обработки
-                    processed_frame = frame.copy()
+                time_since_last = current_time - last_processing_time
 
-                    # Распознаем номер с помощью YOLO + EasyOCR
-                    plate_info = self._recognize_plate_yolo_easyocr(processed_frame)
+                should_process = (
+                        frame_counter <= 10 or
+                        frame_counter % 6 == 0 or  # Увеличили с 5 до 6
+                        time_since_last > self.processing_interval or
+                        (frame_counter > 10 and time_since_last > 4)
+                )
 
-                    # Извлекаем компоненты номера
-                    plate_full = plate_info.get('full', '')
-                    plate_main = plate_info.get('main', '')
-                    plate_region = plate_info.get('region', '')
-                    confidence = plate_info.get('confidence', 0.0)
-                    plate_rect = plate_info.get('bbox', None)
+                if should_process:
+                    last_processing_time = current_time
 
-                    # Проверяем доступ
-                    access_result, access_code = self._check_access(plate_full, plate_main)
+                    # Добавляем кадр в очередь для обработки (неблокирующая)
+                    try:
+                        self.frame_queue.put_nowait((frame.copy(), frame_counter))
+                    except queue.Full:
+                        pass  # Пропускаем кадр если очередь переполнена
 
-                    # Определяем, нужно ли записывать в историю
-                    record_to_history = self._should_record_to_history(
-                        plate_info, confidence, access_code
-                    )
-
-                    # Рисуем прямоугольник вокруг номера и информацию
-                    if plate_rect:
-                        x1, y1, x2, y2 = plate_rect
-                        # Рисуем прямоугольник (зеленый если доступ разрешен, красный если запрещен)
-                        rect_color = (0, 255, 0) if access_code in ['permanent', 'temporary'] else (0, 0, 255)
-                        cv2.rectangle(processed_frame, (x1, y1), (x2, y2), rect_color, 3)
-
-                        # Добавляем информацию о номере
-                        if plate_full:
-                            # Показываем уверенность и статус записи
-                            record_flag = "✓" if record_to_history else "✗"
-                            info_text = f"Plate: {plate_full} ({confidence:.2f}) {record_flag}"
-                            cv2.putText(processed_frame, info_text, (x1, y1 - 10),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, rect_color, 2)
-
-                            # Добавляем основную часть и регион отдельно
-                            debug_text = f"Main: {plate_main}, Region: {plate_region}"
-                            cv2.putText(processed_frame, debug_text, (x1, y2 + 20),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-
-                    # Добавляем статус доступа на кадр
-                    status_color = self._get_color_for_code(access_code)
-                    cv2.putText(processed_frame, f"Access: {access_result}", (10, 60),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
-
-                    # Добавляем время распознавания
-                    cv2.putText(processed_frame, datetime.now().strftime('%H:%M:%S'), (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-                    # Добавляем информацию о записи в историю
-                    if record_to_history:
-                        cv2.putText(processed_frame, "✓ Saved to history", (10, 90),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-                    # Сохраняем результаты
-                    with self.lock:
-                        self.last_processed_frame = processed_frame
-                        self.last_plate_full = plate_full
-                        self.last_plate_main = plate_main
-                        self.last_plate_region = plate_region
-                        self.last_plate = plate_full
-                        self.last_access_result = access_result
-                        self.last_access_code = access_code
-
-                        # Если номер успешно распознан И должен быть записан в историю
-                        if plate_full and record_to_history:
-                            # Обновляем последний успешный
-                            self.last_successful_plate = plate_full
-                            self.last_successful_plate_full = plate_full
-                            self.last_successful_access = access_result
-                            self.last_successful_code = access_code
-                            self.last_successful_frame = processed_frame.copy()
-                            self.last_successful_time = datetime.now()
-
-                            # Добавляем в историю
-                            history_entry = {
-                                'plate': plate_full,
-                                'plate_main': plate_main,
-                                'plate_region': plate_region,
-                                'access': access_result,
-                                'code': access_code,
-                                'confidence': round(confidence, 2),
-                                'time': datetime.now().strftime('%H:%M:%S'),
-                                'date': datetime.now().strftime('%d.%m.%Y')
-                            }
-                            self.recognition_history.append(history_entry)
-                            # Оставляем только последние max_history записей
-                            if len(self.recognition_history) > self.max_history:
-                                self.recognition_history = self.recognition_history[-self.max_history:]
-
-                            print(f"[DEBUG] ✅ ЗАПИСАН: {plate_full} (увер:{confidence:.2f}, стат:{access_code})")
-                        else:
-                            if plate_full:
-                                print(f"[DEBUG] ❌ НЕ ЗАПИСАН: {plate_full} (увер:{confidence:.2f}, стат:{access_code})")
+                    if frame_counter % 30 == 0:
+                        print(f"[INFO] Кадр #{frame_counter} добавлен в очередь")
 
             except Exception as e:
-                print(f"[DEBUG] Исключение в _update: {e}")
+                print(f"[ERROR] Исключение в _update: {e}")
                 import traceback
                 traceback.print_exc()
-                time.sleep(1)
+                time.sleep(0.5)
+
+    def _process_frame_async(self, frame, frame_counter):
+        """Асинхронная обработка кадра с обновлением статистики"""
+        try:
+            # Уменьшаем разрешение для обработки
+            h, w = frame.shape[:2]
+            if w > 640:
+                scale = 640 / w
+                new_w, new_h = 640, int(h * scale)
+                small_frame = cv2.resize(frame, (new_w, new_h))
+                scale_factor = w / new_w
+            else:
+                small_frame = frame
+                scale_factor = 1.0
+
+            with self.lock:
+                self.current_processing_frame = frame.copy()
+                self.current_processing_plate = "обработка..."
+                self.current_processing_access = "..."
+                self.current_processing_code = "processing"
+            plate_info = self._recognize_plate_optimized(small_frame)
+            if plate_info.get('bbox') and scale_factor != 1.0:
+                x1, y1, x2, y2 = plate_info['bbox']
+                plate_info['bbox'] = (int(x1 * scale_factor), int(y1 * scale_factor),
+                                      int(x2 * scale_factor), int(y2 * scale_factor))
+
+            plate_full = plate_info.get('full', '')
+            plate_main = plate_info.get('main', '')
+            plate_region = plate_info.get('region', '')
+            confidence = plate_info.get('confidence', 0.0)
+            plate_rect = plate_info.get('bbox', None)
+
+            access_result, access_code = self._check_access(plate_full, plate_main)
+
+            # Обновляем статистику
+            with self.lock:
+                self.stats['total_processed'] += 1
+
+                if access_code == 'permanent':
+                    self.stats['permanent'] += 1
+                    self.stats['successful'] += 1
+                elif access_code == 'temporary':
+                    self.stats['temporary'] += 1
+                    self.stats['successful'] += 1
+                elif access_code == 'denied':
+                    self.stats['denied'] += 1
+
+            # Создаем обработанный кадр
+            processed_frame = frame.copy()
+            if plate_rect:
+                x1, y1, x2, y2 = plate_rect
+                color = (0, 255, 0) if access_code in ['permanent', 'temporary'] else (0, 0, 255)
+
+                cv2.rectangle(processed_frame, (x1, y1), (x2, y2), color, 2)
+
+                if plate_full:
+                    cv2.putText(processed_frame, plate_full, (x1, y1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+            status_color = self._get_color_for_code(access_code)
+            cv2.putText(processed_frame, f"{access_result[:15]}", (5, 25),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, status_color, 1)
+
+            cv2.putText(processed_frame, datetime.now().strftime('%H:%M:%S'), (5, 45),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+
+            with self.lock:
+                self.last_processed_frame = processed_frame
+                self.last_plate_full = plate_full
+                self.last_plate_main = plate_main
+                self.last_plate_region = plate_region
+                self.last_access_result = access_result
+                self.last_access_code = access_code
+
+                # Обновляем очередь обработки реже
+                if frame_counter % 4 == 0:
+                    queue_entry = {
+                        'plate': plate_full,
+                        'plate_main': plate_main,
+                        'plate_region': plate_region,
+                        'access': access_result,
+                        'code': access_code,
+                        'confidence': round(confidence, 2),
+                        'timestamp': datetime.now().strftime('%H:%M:%S'),
+                    }
+
+                    self.processing_queue.append(queue_entry)
+                    if len(self.processing_queue) > self.max_queue_size:
+                        self.processing_queue.pop(0)
+
+                # В историю добавляем все распознанные номера
+                if plate_full:
+                    history_entry = {
+                        'plate': plate_full,
+                        'plate_main': plate_main,
+                        'plate_region': plate_region,
+                        'access': access_result,
+                        'code': access_code,
+                        'confidence': round(confidence, 2),
+                        'time': datetime.now().strftime('%H:%M:%S'),
+                    }
+
+                    self.recognition_history.append(history_entry)
+                    if len(self.recognition_history) > self.max_history:
+                        self.recognition_history.pop(0)
+
+            if plate_full and confidence > 0.3:
+                print(f"[INFO] Кадр #{frame_counter}: {plate_full} (увер:{confidence:.2f}, стат:{access_code})")
+
+            # Периодическая очистка памяти
+            if frame_counter % 30 == 0:
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        except Exception as e:
+            print(f"[ERROR] Ошибка в _process_frame_async: {e}")
+
+    def _recognize_plate_optimized(self, frame):
+        """Максимально оптимизированное распознавание"""
+        result = {
+            'full': '', 'main': '', 'region': '',
+            'confidence': 0.0, 'bbox': None
+        }
+
+        try:
+            if frame is None or self.detector is None:
+                return result
+
+            # Ограничиваем размер входного кадра для YOLO
+            h, w = frame.shape[:2]
+            if w > 640 or h > 480:
+                scale = min(640 / w, 480 / h)
+                new_w, new_h = int(w * scale), int(h * scale)
+                processed_frame = cv2.resize(frame, (new_w, new_h))
+                scale_factor = scale
+            else:
+                processed_frame = frame
+                scale_factor = 1.0
+            # Детекция с оптимальными параметрами
+            results = self.detector(
+                processed_frame,
+                conf=0.15,  # Низкий порог для лучшей детекции
+                iou=0.4,
+                max_det=3,  # Уменьшаем до 3 объектов
+                verbose=False
+            )
+            best_plate = None
+            best_bbox = None
+            best_confidence = 0.0
+
+            for r in results:
+                if r.boxes is None:
+                    continue
+
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    det_conf = float(box.conf[0])
+
+                    if scale_factor != 1.0:
+                        x1 = int(x1 / scale_factor)
+                        y1 = int(y1 / scale_factor)
+                        x2 = int(x2 / scale_factor)
+                        y2 = int(y2 / scale_factor)
+
+                    # Проверяем что координаты в пределах кадра
+                    h_orig, w_orig = frame.shape[:2]
+                    x1 = max(0, min(x1, w_orig - 1))
+                    y1 = max(0, min(y1, h_orig - 1))
+                    x2 = max(x1 + 1, min(x2, w_orig))
+                    y2 = max(y1 + 1, min(y2, h_orig))
+
+                    plate_crop = frame[y1:y2, x1:x2]
+                    if plate_crop.size < 100:  # Слишком маленькая область
+                        continue
+
+                    # Минимальная предобработка для OCR
+                    try:
+                        plate_crop = cv2.resize(plate_crop, None, fx=2, fy=2)
+                        gray = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
+                        # Простая бинаризация
+                        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    except:
+                        continue
+
+                    if self.reader:
+                        # Одна попытка распознавания (без множественных методов)
+                        ocr_res = self.reader.readtext(
+                            binary,
+                            allowlist=ALLOWED_CHARS,
+                            paragraph=False,
+                            low_text=0.3,
+                            text_threshold=0.4,  # Понижаем порог
+                            width_ths=0.5,
+                            height_ths=0.3,
+                            decoder='greedy',
+                            beamWidth=5
+                        )
+
+                        if ocr_res:
+                            text = ''.join([r[1] for r in ocr_res])
+                            avg_conf = sum([r[2] for r in ocr_res]) / len(ocr_res)
+
+                            parsed = self._parse_russian_plate(text)
+                            combined_conf = det_conf * avg_conf * 1.2  # Бонус за успешное распознавание
+
+                            if parsed['full'] and combined_conf > best_confidence:
+                                best_confidence = min(combined_conf, 1.0)
+                                best_bbox = (x1, y1, x2, y2)
+                                best_plate = parsed
+            print("best_plate", best_plate)
+            if best_plate and best_confidence > 0:
+                result.update({
+                    'full': best_plate['full'],
+                    'main': best_plate['main'],
+                    'region': best_plate['region'],
+                    'confidence': best_confidence,
+                    'bbox': best_bbox
+                })
+
+            return result
+
+        except Exception as e:
+            print(f'ОШИБКА -> {e}')
+            return result
+
+    def _parse_russian_plate(self, text):
+        """Парсинг российского автомобильного номера"""
+        if not text or len(text) < 6:
+            return {'full': '', 'main': '', 'region': ''}
+
+        clean_text = re.sub(r'[^A-Z0-9А-Я]', '', text).upper()
+
+        main_pattern = r'([' + RUSSIAN_LETTERS + r'])(\d{3})([' + RUSSIAN_LETTERS + r']{2})'
+        main_match = re.search(main_pattern, clean_text)
+
+        if main_match:
+            main_part = main_match.group(0)
+            remaining = clean_text[main_match.end():]
+
+            region_match = re.search(r'(\d{2,3})', remaining)
+
+            if region_match:
+                region = region_match.group(0)
+                try:
+                    region_int = int(region)
+                    if 1 <= region_int <= 999:
+                        return {
+                            'full': main_part + region,
+                            'main': main_part,
+                            'region': region
+                        }
+                except:
+                    pass
+
+            return {
+                'full': main_part,
+                'main': main_part,
+                'region': ''
+            }
+
+        # Упрощенный парсинг для нестандартных случаев
+        letters = [c for c in clean_text if c in RUSSIAN_LETTERS]
+        digits = [c for c in clean_text if c.isdigit()]
+
+        if len(letters) >= 3 and len(digits) >= 5:
+            return {
+                'full': clean_text,
+                'main': clean_text[:6] if len(clean_text) >= 6 else clean_text,
+                'region': clean_text[6:] if len(clean_text) > 6 else ''
+            }
+
+        return {'full': '', 'main': '', 'region': ''}
+
+    def _check_access(self, plate_full, plate_main):
+        """Проверка доступа по номеру"""
+        if not plate_full and not plate_main:
+            return "Номер не распознан", "unrecognized"
+
+        def normalize(p):
+            return re.sub(r'[^A-Z0-9А-Я]', '', p).upper() if p else ""
+
+        if plate_full:
+            try:
+                lp = LicensePlate.objects.get(plate_number=normalize(plate_full))
+                return self._check_pass(lp)
+            except:
+                pass
+
+        if plate_main:
+            try:
+                lp = LicensePlate.objects.get(plate_number=normalize(plate_main))
+                return self._check_pass(lp)
+            except:
+                pass
+
+        return "Доступ запрещён", "denied"
+
+    def _check_pass(self, lp):
+        """Проверка пропуска"""
+        try:
+            passes = Pass.objects.filter(
+                license_plate=lp,
+                start_date__lte=datetime.now().date()
+            )
+
+            if not passes.exists():
+                return "Доступ запрещён", "denied"
+
+            p = passes.first()
+            if p.pass_type == 'permanent':
+                return "Постоянный, въезд разрешён", "permanent"
+            else:
+                if p.end_date and p.end_date >= datetime.now().date():
+                    return "Временный, ручной контроль", "temporary"
+                return "Доступ запрещён", "denied"
+        except:
+            return "Ошибка проверки", "error"
 
     def _get_color_for_code(self, code):
         """Возвращает цвет BGR для статуса доступа"""
@@ -400,408 +1376,26 @@ class CameraStream:
             'temporary': (0, 255, 255),
             'denied': (0, 0, 255),
             'unrecognized': (128, 128, 128),
-            'error': (255, 0, 255)
+            'error': (255, 0, 255),
+            'processing': (255, 255, 0)
         }
         return colors.get(code, (255, 255, 255))
 
-    def _is_valid_russian_plate(self, plate_info):
-        """Проверяет валидность российского номера"""
-        main_part = plate_info.get('main', '')
-        region = plate_info.get('region', '')
-        full = plate_info.get('full', '')
-
-        # Проверка длины
-        if len(full) < self.min_plate_length or len(full) > self.max_plate_length:
-            return False
-
-        # Проверка формата основной части (буква + 3 цифры + 2 буквы)
-        main_pattern = r'^([' + RUSSIAN_LETTERS + r'])(\d{3})([' + RUSSIAN_LETTERS + r']{2})$'
-        if not re.match(main_pattern, main_part):
-            return False
-
-        # Проверка региона (2 или 3 цифры)
-        if region and not re.match(r'^\d{2,3}$', region):
-            return False
-
-        # Проверка, что основная часть не содержит только цифр или только букв
-        if main_part.isdigit() or main_part.isalpha():
-            return False
-
-        return True
-
-    def _should_record_to_history(self, plate_info, confidence, access_code):
-        """Определяет, нужно ли записывать номер в историю"""
-        # Не записываем если уверенность ниже порога
-        if confidence < self.confidence_threshold:
-            return False
-
-        # Не записываем если доступ запрещён
-        if access_code in ['denied', 'unrecognized', 'error']:
-            return False
-
-        # Проверяем валидность номера
-        if not self._is_valid_russian_plate(plate_info):
-            return False
-
-        return True
-
-    def _parse_russian_plate(self, text):
-        """
-        Парсит российский номер формата:
-        - A123BC45 (2-значный регион)
-        - A123BC456 (3-значный регион)
-        - А798АР177 (пример из лога)
-        """
-        # Удаляем все пробелы и спецсимволы
-        clean_text = re.sub(r'[^A-Z0-9А-Я]', '', text).upper()
-
-        if not clean_text or len(clean_text) < 6:
-            return {'full': '', 'main': '', 'region': ''}
-
-        print(f"[DEBUG] Парсинг текста: '{clean_text}'")
-
-        # Паттерн для основной части номера (буква + 3 цифры + 2 буквы)
-        # Буквы только из разрешённого набора АВЕКМНОРСТУХ
-        main_pattern = r'([' + RUSSIAN_LETTERS + r'])(\d{3})([' + RUSSIAN_LETTERS + r']{2})'
-        main_match = re.search(main_pattern, clean_text)
-
-        if main_match:
-            main_part = main_match.group(0)  # A123BC
-            main_start = main_match.start()
-            main_end = main_match.end()
-
-            print(f"[DEBUG] Найдена основная часть: '{main_part}' (позиция {main_start}-{main_end})")
-
-            # Ищем регион после основной части (2 или 3 цифры)
-            remaining = clean_text[main_end:]
-            region_match = re.search(r'(\d{2,3})', remaining)
-
-            if region_match:
-                region = region_match.group(0)
-                full_plate = main_part + region
-                print(f"[DEBUG] Найден регион: '{region}', полный номер: '{full_plate}'")
-                return {
-                    'full': full_plate,
-                    'main': main_part,
-                    'region': region
-                }
-            else:
-                # Если регион не найден отдельно, пробуем извлечь из конца всей строки
-                # Ищем 2-3 цифры в конце
-                full_pattern = r'(' + main_pattern + r')(\d{2,3})$'
-                full_match = re.search(full_pattern, clean_text)
-                if full_match:
-                    result = {
-                        'full': full_match.group(0),
-                        'main': full_match.group(1),
-                        'region': full_match.group(5)
-                    }
-                    print(f"[DEBUG] Найден полный номер (из конца): '{result['full']}'")
-                    return result
-                else:
-                    # Только основная часть без региона
-                    print(f"[DEBUG] Только основная часть без региона: '{main_part}'")
-                    return {
-                        'full': main_part,
-                        'main': main_part,
-                        'region': ''
-                    }
-
-        # Если не нашли по паттерну, пробуем альтернативный подход
-        # Например, если текст содержит буквы и цифры в правильном порядке
-        # Извлекаем все буквы и цифры
-        letters = re.findall(r'[' + RUSSIAN_LETTERS + r']', clean_text)
-        digits = re.findall(r'\d', clean_text)
-
-        print(f"[DEBUG] Альтернативный парсинг - буквы: {letters}, цифры: {digits}")
-
-        # Для российского номера нужно: 3 буквы и 3-6 цифр (3 в основной + 2-3 регион)
-        if len(letters) >= 3 and len(digits) >= 5:
-            # Пробуем собрать номер вручную
-            # Первая буква, 3 цифры, 2 буквы, 2-3 цифры региона
-            potential_main = letters[0] + ''.join(digits[:3]) + ''.join(letters[1:3])
-            potential_region = ''.join(digits[3:5]) if len(digits) >= 5 else ''
-
-            if len(digits) >= 6:
-                potential_region = ''.join(digits[3:6])
-
-            if re.match(main_pattern, potential_main):
-                result = {
-                    'full': potential_main + potential_region,
-                    'main': potential_main,
-                    'region': potential_region
-                }
-                print(f"[DEBUG] Собран номер вручную: '{result['full']}'")
-                return result
-
-        # Если ничего не нашли, возвращаем как есть
-        print(f"[DEBUG] Не удалось распарсить, возвращаю как есть: '{clean_text}'")
-        return {
-            'full': clean_text,
-            'main': clean_text,
-            'region': ''
-        }
-
-    def _recognize_plate_yolo_easyocr(self, frame):
-        """
-        Детекция номера с помощью YOLO и распознавание с помощью EasyOCR
-        Улучшенная версия с более агрессивной предобработкой
-        """
-        result = {
-            'full': '',
-            'main': '',
-            'region': '',
-            'confidence': 0.0,
-            'bbox': None
-        }
-
-        try:
-            # 1. Детекция номера с помощью YOLO
-            results = self.detector(frame, conf=0.3, verbose=False)
-
-            best_plate_info = None
-            best_bbox = None
-            best_confidence = 0.0
-
-            for result_item in results:
-                boxes = result_item.boxes
-                if boxes is not None and len(boxes) > 0:
-                    for box in boxes:
-                        # Координаты bounding box
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-
-                        # Уверенность детекции
-                        detection_conf = float(box.conf[0])
-
-                        # Вырезаем область с номером
-                        plate_crop = frame[y1:y2, x1:x2]
-
-                        if plate_crop.size == 0:
-                            continue
-
-                        # Сохраняем оригинал для отладки
-                        #cv2.imwrite(f'debug_plate_orig_{self.frame_count}.jpg', plate_crop)
-
-                        # Улучшенная предобработка для распознавания
-
-                        # 1. Увеличиваем размер
-                        plate_crop = cv2.resize(plate_crop, None, fx=3, fy=3,
-                                                interpolation=cv2.INTER_CUBIC)
-
-                        # 2. Конвертируем в灰度
-                        plate_gray = cv2.cvtColor(plate_crop,
-                                                  cv2.COLOR_BGR2GRAY)
-
-                        # 3. Улучшаем контраст (CLAHE)
-                        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-                        plate_enhanced = clahe.apply(plate_gray)
-
-                        # 4. Применяем бинаризацию
-                        _, plate_binary = cv2.threshold(plate_enhanced, 0, 255,
-                                                        cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-                        # 5. Убираем шум
-                        plate_denoised = cv2.medianBlur(plate_binary, 3)
-
-                        # Сохраняем обработанное изображение для отладки
-                        #cv2.imwrite(f'debug_plate_processed_{self.frame_count}.jpg', plate_denoised)
-
-                        # 2. Распознавание текста EasyOCR
-                        if self.reader:
-                            # Пробуем распознать на оригинальном изображении
-                            results_orig = self.reader.readtext(
-                                plate_crop,
-                                allowlist=ALLOWED_CHARS,
-                                paragraph=False,
-                                width_ths=0.7,
-                                height_ths=0.5,
-                                low_text=0.3,  # Уменьшаем порог для поиска текста
-                                text_threshold=0.5  # Уменьшаем порог уверенности
-                            )
-
-                            # Пробуем распознать на обработанном изображении
-                            results_processed = self.reader.readtext(
-                                plate_denoised,
-                                allowlist=ALLOWED_CHARS,
-                                paragraph=False,
-                                width_ths=0.7,
-                                height_ths=0.5,
-                                low_text=0.3,
-                                text_threshold=0.5
-                            )
-
-                            # Объединяем результаты
-                            all_results = results_orig + results_processed
-
-                            if all_results:
-                                # Группируем результаты по позициям
-                                all_results.sort(key=lambda x: x[0][0][0])  # Сортируем по x координате
-
-                                full_text = ""
-                                total_conf = 0
-                                valid_results = []
-
-                                for ocr_item in all_results:
-                                    text = ocr_item[1]
-                                    conf = ocr_item[2]
-
-                                    # Фильтруем по длине и содержанию
-                                    if len(text) >= 2 and any(c.isdigit() for c in text):
-                                        valid_results.append(ocr_item)
-                                        full_text += text
-                                        total_conf += conf
-
-                                if valid_results:
-                                    avg_conf = total_conf / len(valid_results)
-
-                                    # Парсим российский номер
-                                    plate_info = self._parse_russian_plate(full_text)
-
-                                    # Комбинированная уверенность
-                                    combined_conf = detection_conf * avg_conf
-
-                                    # Бонус за наличие и основной части, и региона
-                                    if plate_info['main'] and plate_info['region']:
-                                        combined_conf *= 1.2  # Увеличиваем уверенность
-                                        combined_conf = min(combined_conf, 1.0)  # Но не больше 1.0
-
-                                    if plate_info['full'] and combined_conf > best_confidence:
-                                        best_confidence = combined_conf
-                                        best_bbox = (x1, y1, x2, y2)
-                                        best_plate_info = plate_info
-
-                                        print(f"[DEBUG] Кандидат: {plate_info['full']} "
-                                              f"(увер:{combined_conf:.2f}, "
-                                              f"детекция:{detection_conf:.2f}, "
-                                              f"распознавание:{avg_conf:.2f})")
-
-            if best_plate_info and best_confidence > 0:
-                result.update({
-                    'full': best_plate_info['full'],
-                    'main': best_plate_info['main'],
-                    'region': best_plate_info['region'],
-                    'confidence': best_confidence,
-                    'bbox': best_bbox
-                })
-                print(f"[DEBUG] Лучший результат: {best_plate_info['full']} "
-                      f"(увер:{best_confidence:.2f})")
-
-            return result
-
-        except Exception as e:
-            print(f"[DEBUG] Ошибка в YOLO+EasyOCR: {e}")
-            import traceback
-            traceback.print_exc()
-            return result
-
-    def _check_access(self, plate_full, plate_main):
-        """
-        Проверка доступа по номеру
-        Сначала проверяет полный номер (с регионом), затем только основную часть
-        """
-        if not plate_full and not plate_main:
-            return "Номер не распознан, ручной доступ", "unrecognized"
-
-        print(f"[DEBUG] Проверка доступа: полный='{plate_full}', основная='{plate_main}'")
-
-        # Функция для нормализации номера (удаление лишних символов)
-        def normalize_plate(plate):
-            if not plate:
-                return ""
-            return re.sub(r'[^A-Z0-9А-Я]', '', plate).upper()
-
-        # Сначала проверяем полный номер (с регионом)
-        if plate_full:
-            normalized_full = normalize_plate(plate_full)
-            print(f"[DEBUG] Поиск полного номера: '{normalized_full}'")
-
-            try:
-                # Ищем точное совпадение
-                lp = LicensePlate.objects.get(plate_number=normalized_full)
-                print(f"[DEBUG] Найден полный номер в БД: {lp.plate_number}")
-                return self._check_pass_for_plate(lp)
-            except LicensePlate.DoesNotExist:
-                print(f"[DEBUG] Полный номер '{normalized_full}' не найден в БД")
-
-                # Если полный номер не найден, пробуем только основную часть
-                if plate_main and plate_main != plate_full:
-                    normalized_main = normalize_plate(plate_main)
-                    print(f"[DEBUG] Поиск основной части: '{normalized_main}'")
-
-                    try:
-                        lp = LicensePlate.objects.get(plate_number=normalized_main)
-                        print(f"[DEBUG] Найдена основная часть в БД: {lp.plate_number}")
-                        return self._check_pass_for_plate(lp)
-                    except LicensePlate.DoesNotExist:
-                        print(f"[DEBUG] Основная часть '{normalized_main}' не найдена в БД")
-                        return "Доступ запрещён", "denied"
-                return "Доступ запрещён", "denied"
-            except Exception as db_error:
-                print(f"[DEBUG] Ошибка БД при поиске полного номера: {db_error}")
-                return "Ошибка базы данных", "error"
-
-        # Проверяем только основную часть
-        if plate_main:
-            normalized_main = normalize_plate(plate_main)
-            print(f"[DEBUG] Поиск только основной части: '{normalized_main}'")
-
-            try:
-                lp = LicensePlate.objects.get(plate_number=normalized_main)
-                print(f"[DEBUG] Найдена основная часть в БД: {lp.plate_number}")
-                return self._check_pass_for_plate(lp)
-            except LicensePlate.DoesNotExist:
-                print(f"[DEBUG] Основная часть '{normalized_main}' не найдена в БД")
-                return "Доступ запрещён", "denied"
-            except Exception as db_error:
-                print(f"[DEBUG] Ошибка БД при поиске основной части: {db_error}")
-                return "Ошибка базы данных", "error"
-
-        return "Доступ запрещён", "denied"
-
-    def _check_pass_for_plate(self, license_plate):
-        """Проверяет наличие действующего пропуска для данного номерного знака"""
-        try:
-            passes = Pass.objects.filter(
-                license_plate=license_plate,
-                start_date__lte=datetime.now().date()
-            )
-
-            if not passes.exists():
-                return "Доступ запрещён (нет пропуска)", "denied"
-
-            p = passes.first()
-            if p.pass_type == 'permanent':
-                return "Постоянный, Въезд разрешён", "permanent"
-            else:  # temporary
-                if p.end_date and p.end_date >= datetime.now().date():
-                    return "Временный, ручной контроль", "temporary"
-                else:
-                    return "Доступ запрещён (просрочен)", "denied"
-
-        except Exception as e:
-            print(f"[DEBUG] Ошибка при проверке пропуска: {e}")
-            return "Ошибка проверки доступа", "error"
-
     def get_frame(self):
-        """Получение текущего кадра для live просмотра"""
         with self.lock:
             if self.last_frame is None:
                 return None
             ret, jpeg = cv2.imencode('.jpg', self.last_frame)
-            if not ret:
-                return None
-            return jpeg.tobytes()
+            return jpeg.tobytes() if ret else None
 
     def get_processed_frame(self):
-        """Получение последнего обработанного кадра"""
         with self.lock:
             if self.last_processed_frame is None:
                 return None
             ret, jpeg = cv2.imencode('.jpg', self.last_processed_frame)
-            return jpeg.tobytes()
+            return jpeg.tobytes() if ret else None
 
     def get_status(self):
-        """Получение статуса последнего распознавания"""
         with self.lock:
             return {
                 'plate': self.last_plate_full,
@@ -812,7 +1406,6 @@ class CameraStream:
             }
 
     def get_last_successful(self):
-        """Получить данные последнего успешного распознавания"""
         with self.lock:
             if self.last_successful_frame is None:
                 return None
@@ -828,13 +1421,56 @@ class CameraStream:
             }
 
     def get_recognition_history(self):
-        """Получить историю распознаваний"""
         with self.lock:
             return self.recognition_history.copy()
 
+    def get_current_processing(self):
+        with self.lock:
+            if self.current_processing_frame is None:
+                return None
+            ret, jpeg = cv2.imencode('.jpg', self.current_processing_frame)
+            if not ret:
+                return None
+            return {
+                'frame': jpeg.tobytes(),
+                'plate': self.current_processing_plate,
+                'access': self.current_processing_access,
+                'code': self.current_processing_code
+            }
+
+    def get_processing_queue(self):
+        with self.lock:
+            return [{
+                'plate': e['plate'],
+                'plate_main': e.get('plate_main', ''),
+                'plate_region': e.get('plate_region', ''),
+                'access': e['access'],
+                'code': e['code'],
+                'confidence': e['confidence'],
+                'timestamp': e['timestamp']
+            } for e in self.processing_queue[-10:]]
+
+    def get_stats(self):
+        """Получение статистики распознаваний"""
+        with self.lock:
+            return self.stats.copy()
+
     def stop(self):
-        """Остановка захвата видео"""
         self.stopped = True
+        self.stop_workers.set()
+
+        # Очищаем очередь
+        while not self.frame_queue.empty():
+            try:
+                self.frame_queue.get_nowait()
+            except queue.Empty:
+                break
+
         if self.cap:
             self.cap.release()
-        print("[DEBUG] Камера остановлена")
+
+        # Очищаем GPU память
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        print("[INFO] Ресурсы освобождены")
