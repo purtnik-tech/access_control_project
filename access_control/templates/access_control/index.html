@@ -3,13 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <title>Система контроля доступа по номерам</title>
+
+    <!--
+        Стили для интерфейса системы контроля доступа.
+        Используются градиенты, тени и анимации для современного вида.
+    -->
     <style>
+        /* Сброс стандартных отступов для всех элементов */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        /* Основной фон страницы с градиентом */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -17,11 +24,13 @@
             padding: 20px;
         }
 
+        /* Контейнер для центрирования содержимого */
         .container {
             max-width: 1600px;
             margin: 0 auto;
         }
 
+        /* Заголовок страницы */
         h1 {
             text-align: center;
             color: white;
@@ -30,6 +39,7 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
+        /* Сетка для видео-карточек (3 колонки) */
         .video-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -37,6 +47,7 @@
             margin-bottom: 30px;
         }
 
+        /* Карточка видео */
         .video-card {
             background: white;
             border-radius: 15px;
@@ -45,10 +56,12 @@
             transition: transform 0.3s;
         }
 
+        /* Эффект при наведении на карточку */
         .video-card:hover {
             transform: translateY(-5px);
         }
 
+        /* Заголовок карточки */
         .video-card h3 {
             color: #333;
             margin-bottom: 15px;
@@ -58,23 +71,27 @@
             gap: 10px;
         }
 
+        /* Иконка в заголовке */
         .video-card h3 i {
             font-size: 1.5em;
         }
 
+        /* Контейнер для видео */
         .video-container {
             background: #000;
             border-radius: 10px;
             overflow: hidden;
-            aspect-ratio: 4/3;
+            aspect-ratio: 4/3;  /* Соотношение сторон 4:3 */
         }
 
+        /* Изображение внутри контейнера */
         .video-container img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
 
+        /* Бейдж статуса */
         .status-badge {
             display: inline-block;
             padding: 5px 10px;
@@ -84,6 +101,7 @@
             margin-top: 10px;
         }
 
+        /* Цвета для различных статусов */
         .permanent {
             background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
             color: #1a5a1a;
@@ -101,6 +119,7 @@
             color: #4a4a4a;
         }
 
+        /* Панель статистики */
         .stats-panel {
             background: white;
             border-radius: 15px;
@@ -109,12 +128,14 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
+        /* Сетка для элементов статистики */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
         }
 
+        /* Элемент статистики */
         .stat-item {
             text-align: center;
             padding: 15px;
@@ -123,17 +144,20 @@
             color: white;
         }
 
+        /* Значение статистики */
         .stat-value {
             font-size: 2em;
             font-weight: bold;
             margin-bottom: 5px;
         }
 
+        /* Подпись статистики */
         .stat-label {
             font-size: 0.9em;
             opacity: 0.9;
         }
 
+        /* Секция истории */
         .history-section {
             background: white;
             border-radius: 15px;
@@ -141,6 +165,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
+        /* Вкладки истории */
         .history-tabs {
             display: flex;
             gap: 10px;
@@ -149,6 +174,7 @@
             padding-bottom: 10px;
         }
 
+        /* Кнопки вкладок */
         .tab-btn {
             padding: 10px 20px;
             border: none;
@@ -160,28 +186,33 @@
             color: #666;
         }
 
+        /* Активная вкладка */
         .tab-btn.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
 
+        /* Содержимое вкладок (скрыто по умолчанию) */
         .history-content {
             display: none;
         }
 
+        /* Активное содержимое */
         .history-content.active {
             display: block;
         }
 
+        /* Сетка для очереди обработки */
         .queue-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 15px;
             max-height: 400px;
-            overflow-y: auto;
+            overflow-y: auto;  /* Прокрутка при переполнении */
             padding: 10px;
         }
 
+        /* Элемент очереди */
         .queue-item {
             background: #f8f9fa;
             border-radius: 10px;
@@ -190,15 +221,18 @@
             transition: transform 0.2s;
         }
 
+        /* Эффект при наведении */
         .queue-item:hover {
             transform: translateX(5px);
         }
 
+        /* Цвета левой границы для разных статусов */
         .queue-item.permanent { border-left-color: #4CAF50; }
         .queue-item.temporary { border-left-color: #FF9800; }
         .queue-item.denied { border-left-color: #f44336; }
         .queue-item.processing { border-left-color: #9C27B0; }
 
+        /* Номер в очереди */
         .queue-plate {
             font-family: monospace;
             font-size: 1.2em;
@@ -206,22 +240,26 @@
             color: #333;
         }
 
+        /* Время в очереди */
         .queue-time {
             font-size: 0.8em;
             color: #999;
             margin-top: 5px;
         }
 
+        /* Уверенность в очереди */
         .queue-confidence {
             font-size: 0.8em;
             color: #666;
         }
 
+        /* Таблица */
         .table {
             width: 100%;
             border-collapse: collapse;
         }
 
+        /* Заголовки таблицы */
         .table th {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -230,15 +268,18 @@
             font-size: 0.9em;
         }
 
+        /* Ячейки таблицы */
         .table td {
             padding: 10px;
             border-bottom: 1px solid #eee;
         }
 
+        /* Подсветка строки при наведении */
         .table tr:hover {
             background: #f5f5f5;
         }
 
+        /* Бейдж в таблице */
         .badge {
             padding: 3px 8px;
             border-radius: 12px;
@@ -246,18 +287,21 @@
             font-weight: 600;
         }
 
+        /* Временная метка */
         .timestamp {
             color: #666;
             font-size: 0.8em;
             margin-top: 5px;
         }
 
+        /* Анимация пульсации */
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.5; }
             100% { opacity: 1; }
         }
 
+        /* Бейдж с анимацией пульсации */
         .processing-badge {
             animation: pulse 1.5s infinite;
         }
@@ -265,52 +309,59 @@
 </head>
 <body>
     <div class="container">
+        <!-- Заголовок страницы -->
         <h1>🚗 Система контроля доступа по номерам</h1>
 
-        <!-- Видео сетка -->
+        <!-- === Секция видео === -->
         <div class="video-grid">
-            <!-- LIVE видео -->
+            <!-- 1. LIVE видео с камеры -->
             <div class="video-card">
                 <h3>
                     <i>📹</i>
                     LIVE видео
                 </h3>
                 <div class="video-container">
+                    <!-- MJPEG поток с камеры -->
                     <img src="{% url 'video_feed' %}" id="liveVideo" alt="Live video">
                 </div>
                 <div class="status-badge processing">В реальном времени</div>
             </div>
 
-            <!-- Текущий кадр на обработке -->
+            <!-- 2. Текущий кадр на обработке -->
             <div class="video-card">
                 <h3>
                     <i>🔄</i>
                     Текущий кадр на обработке
                 </h3>
                 <div class="video-container">
-                    <img src="{% url 'current_processing_frame' %}?t={{ timestamp }}" id="processingFrame" alt="Processing frame">
+                    <!-- Динамическое обновление через timestamp для сброса кэша -->
+                    <img src="{% url 'current_processing_frame' %}?t={{ timestamp }}"
+                         id="processingFrame" alt="Processing frame">
                 </div>
+                <!-- Статус будет обновляться через JavaScript -->
                 <div class="status-badge processing" id="processingStatus">Обработка...</div>
                 <div class="timestamp" id="processingPlate"></div>
             </div>
 
-            <!-- Последний успешно обработанный кадр -->
+            <!-- 3. Последний успешно обработанный кадр -->
             <div class="video-card">
                 <h3>
                     <i>✅</i>
                     Последний успешно обработанный
                 </h3>
                 <div class="video-container">
-                    <img src="{% url 'last_successful_frame' %}?t={{ timestamp }}" id="successfulFrame" alt="Successful frame">
+                    <img src="{% url 'last_successful_frame' %}?t={{ timestamp }}"
+                         id="successfulFrame" alt="Successful frame">
                 </div>
                 <div class="status-badge" id="successfulStatus"></div>
                 <div class="timestamp" id="successfulPlate"></div>
             </div>
         </div>
 
-        <!-- Статистика -->
+        <!-- === Секция статистики === -->
         <div class="stats-panel">
             <div class="stats-grid">
+                <!-- Счетчики будут обновляться через JavaScript -->
                 <div class="stat-item">
                     <div class="stat-value" id="totalProcessed">0</div>
                     <div class="stat-label">Всего обработано</div>
@@ -334,15 +385,22 @@
             </div>
         </div>
 
-        <!-- История и очередь -->
+        <!-- === Секция истории и очереди === -->
         <div class="history-section">
+            <!-- Вкладки -->
             <div class="history-tabs">
-                <button class="tab-btn active" onclick="showTab('successful')">✅ Успешные распознавания</button>
-                <button class="tab-btn" onclick="showTab('queue')">⏳ Очередь обработки</button>
-                <button class="tab-btn" onclick="showTab('all')">📋 Все записи</button>
+                <button class="tab-btn active" onclick="showTab('successful')">
+                    ✅ Успешные распознавания
+                </button>
+                <button class="tab-btn" onclick="showTab('queue')">
+                    ⏳ Очередь обработки
+                </button>
+                <button class="tab-btn" onclick="showTab('all')">
+                    📋 Все записи
+                </button>
             </div>
 
-            <!-- Успешные распознавания -->
+            <!-- Вкладка 1: Успешные распознавания -->
             <div id="successfulTab" class="history-content active">
                 <table class="table">
                     <thead>
@@ -361,14 +419,14 @@
                 </table>
             </div>
 
-            <!-- Очередь обработки -->
+            <!-- Вкладка 2: Очередь обработки -->
             <div id="queueTab" class="history-content">
                 <div class="queue-grid" id="processingQueue">
                     <div style="text-align: center; padding: 20px;">Загрузка...</div>
                 </div>
             </div>
 
-            <!-- Все записи -->
+            <!-- Вкладка 3: Все записи -->
             <div id="allTab" class="history-content">
                 <table class="table">
                     <thead>
@@ -387,31 +445,46 @@
         </div>
     </div>
 
+    <!-- === JavaScript код для динамического обновления интерфейса === -->
     <script>
-        // Переключение табов
+        /**
+         * Переключение между вкладками
+         * @param {string} tabName - название вкладки ('successful', 'queue', 'all')
+         */
         function showTab(tabName) {
+            // Убираем активный класс у всех кнопок
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            // Скрываем все вкладки
             document.querySelectorAll('.history-content').forEach(content => content.classList.remove('active'));
 
+            // Активируем текущую кнопку
             event.target.classList.add('active');
+            // Показываем выбранную вкладку
             document.getElementById(tabName + 'Tab').classList.add('active');
         }
-// Функция обновления статистики
-        function updateStats() {
-    fetch('{% url "stats_info" %}')
-        .then(response => response.json())
-        .then(stats => {
-            document.getElementById('totalProcessed').innerText = stats.total_processed || 0;
-            document.getElementById('successfulCount').innerText = stats.successful || 0;
-            document.getElementById('permanentCount').innerText = stats.permanent || 0;
-            document.getElementById('temporaryCount').innerText = stats.temporary || 0;
-            document.getElementById('deniedCount').innerText = stats.denied || 0;
 
-            console.log('Статистика обновлена:', stats);
-        })
-        .catch(err => console.error('Ошибка статистики:', err));
-}
-        // Обновление всех данных
+        /**
+         * Обновление статистики с сервера
+         */
+        function updateStats() {
+            fetch('{% url "stats_info" %}')
+                .then(response => response.json())
+                .then(stats => {
+                    // Обновляем счетчики
+                    document.getElementById('totalProcessed').innerText = stats.total_processed || 0;
+                    document.getElementById('successfulCount').innerText = stats.successful || 0;
+                    document.getElementById('permanentCount').innerText = stats.permanent || 0;
+                    document.getElementById('temporaryCount').innerText = stats.temporary || 0;
+                    document.getElementById('deniedCount').innerText = stats.denied || 0;
+
+                    console.log('Статистика обновлена:', stats);
+                })
+                .catch(err => console.error('Ошибка статистики:', err));
+        }
+
+        /**
+         * Обновление всех данных интерфейса
+         */
         function updateAll() {
             updateProcessing();
             updateSuccessful();
@@ -419,26 +492,32 @@
             updateStats();
         }
 
-        // Обновление текущего обрабатываемого кадра
+        /**
+         * Обновление информации о текущем обрабатываемом кадре
+         */
         function updateProcessing() {
             fetch('{% url "current_processing_status" %}')
                 .then(response => response.json())
                 .then(data => {
+                    // Обновляем текст с номером
                     document.getElementById('processingPlate').innerText =
                         `Номер: ${data.plate || 'ожидание...'}`;
 
+                    // Обновляем статус
                     let statusElem = document.getElementById('processingStatus');
                     statusElem.innerText = data.access || 'Обработка...';
                     statusElem.className = 'status-badge ' + (data.code || 'processing');
 
-                    // Обновляем изображение
+                    // Обновляем изображение (добавляем timestamp для сброса кэша)
                     let img = document.getElementById('processingFrame');
                     img.src = '{% url "current_processing_frame" %}?t=' + new Date().getTime();
                 })
-                .catch(err => console.error('Ошибка:', err));
+                .catch(err => console.error('Ошибка updateProcessing:', err));
         }
 
-        // Обновление последнего успешного
+        /**
+         * Обновление информации о последнем успешном распознавании
+         */
         function updateSuccessful() {
             fetch('{% url "last_successful_data" %}')
                 .then(response => response.json())
@@ -455,16 +534,19 @@
                         img.src = '{% url "last_successful_frame" %}?t=' + new Date().getTime();
                     }
                 })
-                .catch(err => console.error('Ошибка:', err));
+                .catch(err => console.error('Ошибка updateSuccessful:', err));
         }
 
-        // Обновление очереди обработки
+        /**
+         * Обновление очереди обработки
+         */
         function updateQueue() {
             fetch('{% url "processing_queue" %}')
                 .then(response => response.json())
                 .then(data => {
                     let queueHtml = '';
                     if (data.queue && data.queue.length > 0) {
+                        // Отображаем последние элементы первыми (reverse)
                         data.queue.slice().reverse().forEach(item => {
                             queueHtml += `
                                 <div class="queue-item ${item.code || 'processing'}">
@@ -480,20 +562,12 @@
                     }
                     document.getElementById('processingQueue').innerHTML = queueHtml;
                 })
-                .catch(err => console.error('Ошибка:', err));
+                .catch(err => console.error('Ошибка updateQueue:', err));
         }
 
-        // Обновление статистики
-        function updateStats() {
-            fetch('{% url "recognition_status" %}')
-                .then(response => response.json())
-                .then(data => {
-                    // Здесь можно добавить подсчет статистики
-                })
-                .catch(err => console.error('Ошибка:', err));
-        }
-
-        // Обновление истории успешных
+        /**
+         * Обновление истории успешных распознаваний
+         */
         function updateSuccessfulHistory() {
             fetch('{% url "recognition_history" %}')
                 .then(response => response.json())
@@ -501,7 +575,9 @@
                     let tbody = document.getElementById('successfulHistory');
                     if (data.history && data.history.length > 0) {
                         let html = '';
+                        // Отображаем последние записи первыми
                         data.history.slice().reverse().forEach(item => {
+                            // Показываем только успешные (permanent/temporary)
                             if (item.code && item.code !== 'denied' && item.code !== 'unrecognized') {
                                 html += `
                                     <tr>
@@ -520,10 +596,12 @@
                         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Нет данных</td></tr>';
                     }
                 })
-                .catch(err => console.error('Ошибка:', err));
+                .catch(err => console.error('Ошибка updateSuccessfulHistory:', err));
         }
 
-        // Обновление всей истории
+        /**
+         * Обновление полной истории всех распознаваний
+         */
         function updateAllHistory() {
             fetch('{% url "recognition_history" %}')
                 .then(response => response.json())
@@ -531,6 +609,7 @@
                     let tbody = document.getElementById('allHistory');
                     if (data.history && data.history.length > 0) {
                         let html = '';
+                        // Отображаем последние записи первыми
                         data.history.slice().reverse().forEach(item => {
                             html += `
                                 <tr>
@@ -546,18 +625,19 @@
                         tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Нет данных</td></tr>';
                     }
                 })
-                .catch(err => console.error('Ошибка:', err));
+                .catch(err => console.error('Ошибка updateAllHistory:', err));
         }
 
-        // Обновляем всё каждые 2 секунды
+        // === Периодическое обновление ===
+        // Обновляем все данные каждые 2 секунды
         setInterval(() => {
             updateAll();
             updateSuccessfulHistory();
             updateAllHistory();
-            updateStats();  // Добавлено!
+            updateStats();
         }, 2000);
 
-        // Первоначальная загрузка
+        // === Первоначальная загрузка ===
         updateAll();
         updateSuccessfulHistory();
         updateAllHistory();
