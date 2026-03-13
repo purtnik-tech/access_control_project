@@ -20,7 +20,8 @@ from ultralytics import YOLO
 from .models import LicensePlate, Pass
 
 # Константы для российских номеров
-RUSSIAN_LETTERS: str = 'АВЕКМНОРСТУХ'  # Допустимые буквы в российских номерах
+# RUSSIAN_LETTERS: str = 'АВЕКМНОРСТУХ'  # Допустимые буквы в российских номерах
+RUSSIAN_LETTERS: str = 'ABEKMHOPCTYX'  # Допустимые буквы в российских номерах
 ALLOWED_CHARS: str = RUSSIAN_LETTERS + '0123456789'  # Все допустимые символы
 
 
@@ -72,11 +73,11 @@ class CameraStream:
 
         # Параметры распознавания
         self.confidence_threshold: float = 0.05  # Минимальная уверенность для записи
-        self.min_plate_length: int = 6  # Минимальная длина номера
+        self.min_plate_length: int = 8  # Минимальная длина номера
         self.max_plate_length: int = 9  # Максимальная длина номера
 
         # === Управление потоками ===
-        self.max_workers: int = 6  # Максимальное количество параллельных потоков
+        self.max_workers: int = 9  # Максимальное количество параллельных потоков
         self.active_workers: int = 0  # Текущее количество активных воркеров
         self.worker_lock: threading.Lock = threading.Lock()  # Блокировка для счетчика воркеров
         self.worker_semaphore: threading.Semaphore = threading.Semaphore(self.max_workers)  # Семафор для ограничения
@@ -738,7 +739,7 @@ class CameraStream:
                 avg_conf: float = sum([r[2] for r in results]) / len(results)
 
                 # Очищаем текст от лишних символов
-                clean_text: str = re.sub(r'[^A-Z0-9А-Я]', '', full_text).upper()
+                clean_text: str = re.sub(r'[^A-Z0-9]', '', full_text).upper()
 
                 if clean_text:
                     return {
@@ -766,7 +767,7 @@ class CameraStream:
             return {'full': '', 'main': '', 'region': ''}
 
         # Очищаем текст
-        clean_text: str = re.sub(r'[^A-Z0-9А-Я]', '', text).upper()
+        clean_text: str = re.sub(r'[^A-Z0-9]', '', text).upper()
 
         # Паттерн для основной части (буква + 3 цифры + 2 буквы)
         main_pattern: str = r'([' + RUSSIAN_LETTERS + r'])(\d{3})([' + RUSSIAN_LETTERS + r']{2})'
@@ -837,7 +838,7 @@ class CameraStream:
 
         def normalize(p: str) -> str:
             """Нормализация номера для поиска в БД"""
-            return re.sub(r'[^A-Z0-9А-Я]', '', p).upper() if p else ""
+            return re.sub(r'[^A-Z0-9]', '', p).upper() if p else ""
 
         # Сначала проверяем полный номер
         if plate_full:
