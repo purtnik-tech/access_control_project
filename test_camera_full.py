@@ -1,4 +1,3 @@
-# test_camera_full.py
 import cv2
 import os
 import subprocess

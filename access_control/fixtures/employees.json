@@ -1,0 +1,41 @@
+[
+  {
+    "model": "access_control.employee",
+    "pk": "7e0a82da-0c35-4b73-a0db-9fbe5b7f0858",
+    "fields": {
+      "creation_date": "2026-05-04T08:47:14.008Z",
+      "surname": "Иванов",
+      "first_name": "Иван",
+      "patronymic": "Иванович",
+      "phone_number": "88005553535",
+      "login_user": "IvanovII",
+      "employee_number": "1"
+    }
+  },
+  {
+    "model": "access_control.employee",
+    "pk": "d51d6988-07f7-43ad-b76e-db1b08619456",
+    "fields": {
+      "creation_date": "2026-05-04T08:47:21.472Z",
+      "surname": "Петров",
+      "first_name": "Пётр",
+      "patronymic": "Петрович",
+      "phone_number": "+78005553536",
+      "login_user": "PetrovPP",
+      "employee_number": "2"
+    }
+  },
+  {
+    "model": "access_control.employee",
+    "pk": "fb006dff-d271-49bd-87f1-f309b8a0162e",
+    "fields": {
+      "creation_date": "2026-05-04T08:47:26.897Z",
+      "surname": "Самураев",
+      "first_name": "Акакий",
+      "patronymic": "Модестович",
+      "phone_number": "+78005553537",
+      "login_user": "SamuraevAM",
+      "employee_number": "3"
+    }
+  }
+]

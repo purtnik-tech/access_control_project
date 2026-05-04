@@ -1,0 +1,38 @@
+[
+  {
+    "model": "access_control.guest",
+    "pk": "79db0246-1c39-4b75-b44f-e20208700269",
+    "fields": {
+      "creation_date": "2026-05-04T08:47:40.206Z",
+      "surname": "Петрова",
+      "first_name": "Ольга",
+      "patronymic": "Васильевна",
+      "phone_number": "88005555556",
+      "organization": "ООО 'Рога и Копыта'"
+    }
+  },
+  {
+    "model": "access_control.guest",
+    "pk": "9e9f7028-ae3a-44ee-b2a8-710c31dd8f8d",
+    "fields": {
+      "creation_date": "2026-05-04T08:47:47.464Z",
+      "surname": "Громов",
+      "first_name": "Николай",
+      "patronymic": "Николаевич",
+      "phone_number": "+78005555556",
+      "organization": "ИП Громов"
+    }
+  },
+  {
+    "model": "access_control.guest",
+    "pk": "ed74d9cb-40e9-40f2-8942-85ca6e525f91",
+    "fields": {
+      "creation_date": "2026-05-04T08:48:05.559Z",
+      "surname": "Грецкий",
+      "first_name": "Олег",
+      "patronymic": "Викторович",
+      "phone_number": "+78005555557",
+      "organization": "ООО 'Организация'"
+    }
+  }
+]

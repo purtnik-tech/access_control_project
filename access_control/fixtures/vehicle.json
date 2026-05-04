@@ -1,0 +1,57 @@
+[
+  {
+    "model": "access_control.vehicle",
+    "pk": "107239c6-f7a6-4e6a-bc6c-601142c5d7b1",
+    "fields": {
+      "creation_date": "2026-05-04T08:48:39Z",
+      "license_plate": "89d8ddf5-6566-4329-b609-be3fda174d2e",
+      "brand": "Porsche",
+      "model": "911",
+      "color": "Красный"
+    }
+  },
+  {
+    "model": "access_control.vehicle",
+    "pk": "374900b8-4e90-4a64-a59d-9ce269e14959",
+    "fields": {
+      "creation_date": "2026-05-04T08:53:16Z",
+      "license_plate": "ef433cdf-7af3-400d-b53f-1093c5142c0e",
+      "brand": "BMW",
+      "model": "4 series",
+      "color": "Серый"
+    }
+  },
+  {
+    "model": "access_control.vehicle",
+    "pk": "66a7fb22-81dc-4f40-97aa-7cbfe920e67d",
+    "fields": {
+      "creation_date": "2026-05-04T08:52:57Z",
+      "license_plate": "821689b8-a3ce-4e89-b924-a429b01f4387",
+      "brand": "Land Rover",
+      "model": "Defender",
+      "color": "Серый"
+    }
+  },
+  {
+    "model": "access_control.vehicle",
+    "pk": "8be5e982-a8f1-49ec-8d3e-902e7cd76005",
+    "fields": {
+      "creation_date": "2026-05-04T08:46:49Z",
+      "license_plate": "1e52e11f-c0a9-42dc-91a1-daee64e8630e",
+      "brand": "Toyota",
+      "model": "Camry",
+      "color": "Чёрный"
+    }
+  },
+  {
+    "model": "access_control.vehicle",
+    "pk": "c87ec432-9a12-4609-88e0-63e3252e9914",
+    "fields": {
+      "creation_date": "2026-05-04T08:54:10Z",
+      "license_plate": "0e491097-4055-410a-8dd0-fd23ec5b1e5d",
+      "brand": "Alfa Romeo",
+      "model": "GIULIA",
+      "color": "Белый"
+    }
+  }
+]

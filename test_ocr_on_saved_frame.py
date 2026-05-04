@@ -3,8 +3,8 @@ import pytesseract
 import re
 import os
 
-# Путь к Tesseract (измените при необходимости)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+pytesseract.pytesseract.tesseract_cmd = os.environ.get('TESSERACT_PATH')
 
 
 def test_ocr_on_image(image_path):
