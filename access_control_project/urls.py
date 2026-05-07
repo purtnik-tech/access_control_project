@@ -40,4 +40,5 @@ urlpatterns: List[Union[URLPattern, URLResolver]] = [
     # приложения 'access_control' (файл urls.py внутри этого приложения)
     # Это позволяет модульно организовать маршруты для разных частей проекта
     path('', include('access_control.urls')),
+    path('camera/', include('camera_stream.urls')),
 ]

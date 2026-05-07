@@ -3,3 +3,6 @@ venv/
 .env/
 env/
 *.sqlite3
+
+runs/
+.runs/

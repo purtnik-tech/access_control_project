@@ -1,0 +1,7 @@
+path: C:\\license_plates_dataset
+
+train: C:\\license_plates_dataset\\train\\img
+va: C:\\license_plates_dataset\\val\\img
+
+names:
+  0: license_plate

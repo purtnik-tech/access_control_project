@@ -50,6 +50,8 @@ INSTALLED_APPS: List[str] = [
 
     # Пользовательские приложения проекта
     'access_control',                 # Приложение контроля доступа
+    'camera_stream',
+    'processing'
 ]
 
 # === Middleware ===
@@ -159,3 +161,18 @@ STATIC_URL: str = 'static/'
 # STATIC_ROOT - директория для сбора статических файлов
 # STATICFILES_DIRS - дополнительные директории со статическими файлами
 # MEDIA_URL и MEDIA_ROOT - для пользовательских файлов
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}
