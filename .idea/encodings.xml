@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/access_control/fixtures/employees.json" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/access_control/fixtures/guests.json" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/access_control/fixtures/license_plate.json" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/access_control/fixtures/vehicle.json" charset="UTF-8" />
+  </component>
+</project>

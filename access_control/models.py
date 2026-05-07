@@ -2,46 +2,76 @@
 Модели данных для системы контроля доступа.
 Определяют структуру базы данных для сотрудников, гостей, номеров и пропусков.
 """
+import uuid
 
 from django.db import models
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
-from typing import Optional, Union, Tuple, Any
+
+from django.utils import timezone
 
 
-class Employee(models.Model):
+class PersonalDataModel(models.Model):
+    """
+    Абстрактная модель персональных данных
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        verbose_name='ID',
+        db_comment='ID',
+    )
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
+        editable=False,
+    )
+    surname = models.CharField(
+        max_length=64,
+        verbose_name="Фамилия",
+        db_comment="Фамилия",
+    )
+    first_name = models.CharField(
+        max_length=64,
+        verbose_name="Имя",
+        db_comment="Имя",
+    )
+    patronymic = models.CharField(
+        max_length=64,
+        blank=True,  # Может быть пустым
+        verbose_name="Отчество",
+        db_comment="Отчество",
+    )
+    phone_number = models.CharField(
+        max_length=20,
+        verbose_name="Номер телефона",
+        db_comment="Номер телефона",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        abstract = True
+
+
+class Employee(PersonalDataModel):
     """
     Модель сотрудника предприятия.
     Хранит персональные данные и учётную информацию сотрудника.
     """
-
-    # Логин сотрудника (используется как первичный ключ)
-    login_user: models.CharField = models.CharField(
-        max_length=50,
-        primary_key=True,
-        verbose_name="Логин"
+    login_user = models.CharField(
+        unique=True,
+        db_index=True,
+        max_length=64,
+        verbose_name="Логин",
+        db_comment="Логин",
     )
-
-    # Персональные данные
-    surname: models.CharField = models.CharField(
-        max_length=50,
-        verbose_name="Фамилия"
-    )
-    first_name: models.CharField = models.CharField(
-        max_length=50,
-        verbose_name="Имя"
-    )
-    patronymic: models.CharField = models.CharField(
-        max_length=50,
-        blank=True,  # Может быть пустым
-        verbose_name="Отчество"
-    )
-
-    # Уникальный табельный номер сотрудника
-    employee_number: models.CharField = models.CharField(
+    employee_number = models.CharField(
         max_length=20,
         unique=True,  # Должен быть уникальным
-        verbose_name="Табельный номер"
+        verbose_name="Табельный номер",
+        db_comment="Табельный номер",
     )
 
     def __str__(self) -> str:
@@ -55,37 +85,18 @@ class Employee(models.Model):
 
     class Meta:
         """Метаданные модели для административного интерфейса."""
-        verbose_name: str = 'сотрудник'  # Имя в единственном числе
-        verbose_name_plural: str = 'сотрудники'  # Имя во множественном числе
+        db_table = 'employees'
+        ordering = ['surname', 'creation_date']
+        verbose_name = 'Сотрудник'  # Имя в единственном числе
+        verbose_name_plural = 'Сотрудники'  # Имя во множественном числе
 
 
-class Guest(models.Model):
+class Guest(PersonalDataModel):
     """
     Модель гостя предприятия.
     Хранит данные посетителей, не являющихся сотрудниками.
     """
-
-    # Персональные данные
-    surname: models.CharField = models.CharField(
-        max_length=50,
-        verbose_name="Фамилия"
-    )
-    first_name: models.CharField = models.CharField(
-        max_length=50,
-        verbose_name="Имя"
-    )
-    patronymic: models.CharField = models.CharField(
-        max_length=50,
-        blank=True,
-        verbose_name="Отчество"
-    )
-
-    # Контактная информация
-    phone_number: models.CharField = models.CharField(
-        max_length=20,
-        verbose_name="Номер телефона"
-    )
-    organization: models.CharField = models.CharField(
+    organization = models.CharField(
         max_length=100,
         blank=True,  # Может быть пустым
         verbose_name="Организация"
@@ -100,25 +111,46 @@ class Guest(models.Model):
         """
         return f"{self.surname} {self.first_name}"
 
+    class Meta:
+        db_table = 'guests'
+        ordering = ['surname', 'creation_date']
+        verbose_name = 'Гость'
+        verbose_name_plural = 'Гости'
+
 
 class LicensePlate(models.Model):
     """
     Модель государственного номерного знака (ГНЗ).
     Хранит информацию об автомобильных номерах.
     """
-
-    # Номерной знак (например, "А123ВС177")
-    plate_number: models.CharField = models.CharField(
-        max_length=15,
-        unique=True,  # Номер должен быть уникальным
-        validators=[
-            RegexValidator(
-                r'^[А-ЯA-Z0-9]+$',  # Только буквы (рус/лат) и цифры
-                'Только буквы и цифры'
-            )
-        ],
-        verbose_name="Государственный номер"
+    id = models.UUIDField(
+        primary_key=True,
+        verbose_name='ID',
+        db_comment='ID',
+        default=uuid.uuid4,
     )
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
+    )
+    plate_number = models.CharField(
+        max_length=15,
+        unique=True,
+        validators=[
+            RegexValidator(r'^[А-ЯA-Z0-9]+$','Только буквы и цифры') # Только буквы (рус/лат) и цифры
+        ],
+        verbose_name="Государственный номер",
+        db_comment="Государственный номер",
+        db_index=True,
+    )
+
+    def clean(self):
+        self.plate_number = self.plate_number.upper() # Явно переводит все символы номера в верхний регистр
+
+    def save(self, **kwargs):
+        self.full_clean()
+        super().save(**kwargs)
 
     def __str__(self) -> str:
         """
@@ -127,7 +159,139 @@ class LicensePlate(models.Model):
         Returns:
             str: Номерной знак
         """
-        return self.plate_number
+        return f'{self.plate_number}'
+
+    class Meta:
+        db_table = 'license_plates'
+        ordering = ['plate_number']
+        verbose_name = 'Регистрационный номер'
+        verbose_name_plural = 'Регистрационные номера'
+
+
+class Vehicle(models.Model):
+    """
+    Модель данных транспортных средств
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        verbose_name='ID',
+        db_comment='ID',
+    )
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
+    )
+    license_plate = models.ForeignKey(
+        LicensePlate,
+        on_delete=models.PROTECT,
+        verbose_name='Гос.номер',
+        db_comment='Гос.номер',
+        null=True,
+        blank=True,
+    )
+    brand = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        verbose_name='Марка транспортного средства',
+        db_comment='Марка транспортного средства',
+    )
+    model = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        verbose_name='Модель транспортного средства',
+        db_comment='Модель транспортного средства',
+    )
+    color = models.CharField(
+        max_length=16,
+        verbose_name='Цвет транспортного средства',
+        db_comment='Цвет транспортного средства',
+        blank=True,
+        null=True,
+    )
+
+    @property
+    def plate_number(self) -> str:
+        return self.license_plate.plate_number
+
+    def __str__(self) -> str:
+        """
+        :return: Наименование и модель транспортного средства
+        """
+        return f'{self.brand} {self.model}'
+
+    class Meta:
+        db_table = 'vehicles'
+        ordering = ['brand', 'model', 'creation_date']
+        verbose_name = 'Транспортное средство'
+        verbose_name_plural = 'Транспортные средства'
+
+
+class AccessSubject(models.Model):
+    """
+    Модель данных субъектов пропусков
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        verbose_name='ID',
+        db_comment='ID',
+    )
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
+    )
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.PROTECT,
+        verbose_name='Сотрудник',
+        db_comment='Сотрудник',
+        blank=True,
+        null=True,
+    )
+    guest = models.ForeignKey(
+        Guest,
+        on_delete=models.PROTECT,
+        verbose_name='Гость',
+        db_comment='Гость',
+        blank=True,
+        null=True,
+    )
+    vehicle = models.ForeignKey(
+        Vehicle,
+        on_delete=models.PROTECT,
+        verbose_name='Транспортное средство',
+        db_comment='Транспортное средство',
+    )
+
+    @property
+    def subject(self) -> Employee | Guest:
+        return self.employee or self.guest
+
+    @property
+    def plate_number(self) -> str:
+        return self.vehicle.license_plate.plate_number
+
+    def __str__(self) -> str:
+        return f'{self.subject}'
+
+    class Meta:
+        db_table = 'access_subjects'
+        ordering = ['creation_date']
+        verbose_name = 'Субъект пропуска'
+        verbose_name_plural = 'Субъекты пропуска'
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'guest'], name='unique_access_subjects_employee_guest'),
+            models.CheckConstraint(
+                check=models.Q(employee__isnull=True, guest__isnull=False) |
+                      models.Q(employee__isnull=False, guest__isnull=True),
+                name='unique_access_one_subject'
+            )
+        ]
 
 
 class Pass(models.Model):
@@ -136,59 +300,50 @@ class Pass(models.Model):
     Связывает автомобиль с сотрудником или гостем и определяет права доступа.
     """
 
-    # Типы пропусков
-    PASS_TYPES: Tuple[Tuple[str, str], ...] = (
-        ('permanent', 'Постоянный (сотрудник)'),  # Для сотрудников
-        ('temporary', 'Временный (гость)'),  # Для гостей
-    )
+    class TypesPass(models.TextChoices):
+        """
+        Типы пропусков
+        """
+        PERMANENT = 'Постоянный'
+        TEMPORARY = 'Временный'
 
-    # Владелец пропуска (может быть либо сотрудник, либо гость)
-    guest: Optional[models.ForeignKey] = models.ForeignKey(
-        Guest,
-        on_delete=models.CASCADE,  # При удалении гостя удаляются его пропуска
-        null=True,
-        blank=True
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        verbose_name='ID',
+        db_comment='ID',
     )
-    employee: Optional[models.ForeignKey] = models.ForeignKey(
-        Employee,
-        on_delete=models.CASCADE,  # При удалении сотрудника удаляются его пропуска
-        null=True,
-        blank=True
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
     )
-
-    # Информация об автомобиле
-    car_brand: models.CharField = models.CharField(
-        max_length=50,
-        verbose_name="Марка автомобиля"
+    subject = models.ForeignKey(
+        AccessSubject,
+        on_delete=models.CASCADE,
+        verbose_name='Субъект пропуска',
+        db_comment='Субъект пропуска',
     )
-    license_plate: models.ForeignKey = models.ForeignKey(
-        LicensePlate,
-        on_delete=models.CASCADE,  # При удалении номера удаляются связанные пропуска
-        verbose_name="ГНЗ"
-    )
-
-    # Параметры пропуска
-    pass_type: models.CharField = models.CharField(
+    pass_type = models.CharField(
         max_length=10,
-        choices=PASS_TYPES,  # Выбор из предопределенных типов
-        verbose_name="Тип пропуска"
+        choices=TypesPass.choices,
+        verbose_name="Тип пропуска",
+        db_comment="Тип пропуска",
     )
-    start_date: models.DateField = models.DateField(
+    start_date = models.DateField(
         verbose_name="Дата начала действия"
     )
-    end_date: Optional[models.DateField] = models.DateField(
+    end_date = models.DateField(
         null=True,
         blank=True,
         verbose_name="Дата окончания (для временных)"
     )
-
-    # Дополнительная информация для временных пропусков
-    cargo_type: models.CharField = models.CharField(
+    cargo_type = models.CharField(
         max_length=100,
         blank=True,
         verbose_name="Вид груза (для временных)"
     )
-    entry_time: Optional[models.TimeField] = models.TimeField(
+    entry_time = models.TimeField(
         null=True,
         blank=True,
         verbose_name="Время въезда (для временных)"
@@ -202,23 +357,17 @@ class Pass(models.Model):
         Raises:
             ValidationError: Если данные не проходят валидацию
         """
-        # Проверка наличия владельца
-        if not self.guest and not self.employee:
-            raise ValidationError(
-                "Должен быть указан либо сотрудник, либо гость."
-            )
-
         # Проверка даты окончания для постоянного пропуска
-        if self.pass_type == 'permanent' and self.end_date:
-            raise ValidationError(
-                "Для постоянного пропуска дата окончания не задаётся."
-            )
+        if self.pass_type == self.TypesPass.PERMANENT and self.end_date:
+            raise ValidationError("Для постоянного пропуска дата окончания не задаётся.")
 
         # Проверка наличия даты окончания для временного пропуска
-        if self.pass_type == 'temporary' and not self.end_date:
-            raise ValidationError(
-                "Для временного пропуска необходима дата окончания."
-            )
+        if self.pass_type == self.TypesPass.TEMPORARY and not self.end_date:
+            raise ValidationError("Для временного пропуска необходима дата окончания.")
+
+    def save(self, **kwargs):
+        self.full_clean()
+        super().save(**kwargs)
 
     def __str__(self) -> str:
         """
@@ -227,5 +376,10 @@ class Pass(models.Model):
         Returns:
             str: Номерной знак и информация о владельце
         """
-        owner: Optional[Union[Employee, Guest]] = self.employee or self.guest
-        return f"{self.license_plate} - {owner}"
+        return f"{self.subject.subject} {self.subject.vehicle.plate_number}"
+
+    class Meta:
+        db_table = 'passes'
+        ordering = ['creation_date']
+        verbose_name = 'Пропуск'
+        verbose_name_plural = 'Пропуска'

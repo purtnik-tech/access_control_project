@@ -9,7 +9,6 @@ from django.http import StreamingHttpResponse, HttpResponse, JsonResponse
 from django.views.decorators import gzip
 import time
 import threading
-from datetime import datetime
 from typing import Optional, Generator, Dict, Any, List
 
 from .camera_stream import CameraStream
@@ -119,7 +118,7 @@ def index(request) -> HttpResponse:
 
 
 @gzip.gzip_page
-def video_feed(request) -> StreamingHttpResponse:
+def video_feed(request) -> StreamingHttpResponse | HttpResponse:
     """
     MJPEG поток для отображения live видео с камеры.
     Используется в теге <img src="..."> для непрерывного видео.

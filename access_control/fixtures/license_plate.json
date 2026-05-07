@@ -1,0 +1,50 @@
+[
+  {
+    "model": "access_control.licenseplate",
+    "pk": "0e491097-4055-410a-8dd0-fd23ec5b1e5d",
+    "fields": {
+      "creation_date": "2026-05-04T08:52:18Z",
+      "plate_number": "К001КК777"
+    }
+  },
+  {
+    "model": "access_control.licenseplate",
+    "pk": "1e52e11f-c0a9-42dc-91a1-daee64e8630e",
+    "fields": {
+      "creation_date": "2026-05-04T08:46:38Z",
+      "plate_number": "АР798АР177"
+    }
+  },
+  {
+    "model": "access_control.licenseplate",
+    "pk": "37628581-7c00-4f50-8cb3-57b20bd5d1eb",
+    "fields": {
+      "creation_date": "2026-05-04T08:52:01Z",
+      "plate_number": "A482МР11"
+    }
+  },
+  {
+    "model": "access_control.licenseplate",
+    "pk": "821689b8-a3ce-4e89-b924-a429b01f4387",
+    "fields": {
+      "creation_date": "2026-05-04T08:52:29Z",
+      "plate_number": "С444КА198"
+    }
+  },
+  {
+    "model": "access_control.licenseplate",
+    "pk": "89d8ddf5-6566-4329-b609-be3fda174d2e",
+    "fields": {
+      "creation_date": "2026-05-04T08:48:22Z",
+      "plate_number": "К777КК777"
+    }
+  },
+  {
+    "model": "access_control.licenseplate",
+    "pk": "ef433cdf-7af3-400d-b53f-1093c5142c0e",
+    "fields": {
+      "creation_date": "2026-05-04T08:51:48Z",
+      "plate_number": "K444KK10"
+    }
+  }
+]
