@@ -1,79 +1,44 @@
 import json
-import cv2
 from pathlib import Path
 
-DATASET_DIR = "C:\\license_plates_dataset"
-SPLITS = ["train", "val", "test"]
+
+DATASET_ROOT = Path("C:\\license_plates_dataset")
 
 
-def convert_bbox(img_w, img_h, x, y, w, h):
-    xc = (x + w / 2) / img_w
-    yc = (y + h / 2) / img_h
-    bw = w / img_w
-    bh = h / img_h
-    return xc, yc, bw, bh
+def build_annotation_file(split: str):
+    split_dir = DATASET_ROOT / split
 
+    ann_dir = split_dir / "ann"
+    img_dir = split_dir / "img"
 
-def safe_get_bbox(obj):
-    """
-    Пытаемся достать bbox из разных форматов
-    """
-    if not obj:
-        return None
+    output_file = DATASET_ROOT / f"{split}.txt"
 
-    if bb := obj.get("bbox"):
-        return bb
+    rows = []
 
-    if all(k in obj for k in ["x", "y", "width", "height"]):
-        return obj["x"], obj["y"], obj["width"], obj["height"]
-
-    return None
-
-
-for split in SPLITS:
-    img_dir = Path(DATASET_DIR) / split / "img"
-    ann_dir = Path(DATASET_DIR) / split / "ann"
-    label_dir = Path(DATASET_DIR) / "labels" / split
-
-    label_dir.mkdir(parents=True, exist_ok=True)
-
-    for json_path in ann_dir.glob("*.json"):
-        with open(json_path, "r", encoding="utf-8") as f:
+    for json_file in ann_dir.glob("*.json"):
+        with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        image_name = json_path.stem + ".jpg"
-        image_path = img_dir / image_name
+        plate_text = data.get("description")
 
-        img = cv2.imread(str(image_path))
-        if img is None:
-            print(f"[SKIP] missing image: {image_name}")
+        if not plate_text:
             continue
 
-        h_img, w_img = img.shape[:2]
+        image_file = img_dir / f"{json_file.stem}.png"
 
-        label_path = label_dir / f"{json_path.stem}.txt"
+        if not image_file.exists():
+            print(f"Missing image: {image_file}")
+            continue
 
-        with open(label_path, "w") as out:
+        abs_path = image_file.resolve()
 
-            objects = data.get("objects", [])
+        rows.append(f"{abs_path}\t{plate_text}")
 
-            # CASE 1: есть bbox-объекты
-            if objects and any(safe_get_bbox(o) for o in objects):
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(rows))
 
-                for obj in objects:
-                    bbox = safe_get_bbox(obj)
-                    if bbox is None:
-                        continue
+    print(f"{split}: {len(rows)} samples")
 
-                    x, y, w, h = bbox
 
-                    if w < 2 or h < 2:
-                        continue
-
-                    xc, yc, bw, bh = convert_bbox(w_img, h_img, x, y, w, h)
-
-                    out.write(f"0 {xc:.6f} {yc:.6f} {bw:.6f} {bh:.6f}\n")
-
-            # CASE 2: bbox отсутствует → считаем весь image объектом
-            else:
-                out.write("0 0.5 0.5 1.0 1.0\n")
+for split in ["train", "val", "test"]:
+    build_annotation_file(split)

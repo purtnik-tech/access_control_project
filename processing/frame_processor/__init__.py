@@ -1,1 +1,1 @@
-from .frame_processor import JPEGFrameProcessor, FrameProcessor
+from .frame_processor import FrameProcessor

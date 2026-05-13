@@ -2,7 +2,8 @@ venv/
 .venv/
 .env/
 env/
+.env
 *.sqlite3
-
+*.pt
 runs/
 .runs/

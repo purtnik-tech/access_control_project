@@ -19,5 +19,5 @@ def get_camera() -> CameraStream:
     """
     global _camera
     if not _camera:
-        _camera = CameraStream(f'rtsp://{CAMERA_LOGIN}:{CAMERA_PASS}@{CAMERA_IP}/stream')
+        _camera = CameraStream(f'rtsp://{CAMERA_LOGIN}:{CAMERA_PASS}@{CAMERA_IP}/Streaming/Channels/101?tcp')
     return _camera

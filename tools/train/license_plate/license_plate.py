@@ -4,7 +4,7 @@ from ultralytics import YOLO
 def main():
     model = YOLO('yolov10x.pt')
     model.train(
-        data='C:\\space\\ac\\tools\\yamls\\license.yaml',
+        data='C:\\Users\\localadmin\\PycharmProjects\\access_control_project\\tools\\yamls\\license.yaml',
         epochs=50,
         imgsz=640,
         batch=16,

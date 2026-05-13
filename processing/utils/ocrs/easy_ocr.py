@@ -1,18 +1,79 @@
-import easyocr
+import cv2
+import numpy as np
+import re
+from paddleocr import PaddleOCR
 
-
-class EasyOcrEngine:
+class LicensePlateOCR:
 
     def __init__(self):
-        self.reader = easyocr.Reader(['ru', 'en'])
+        self.ocr = PaddleOCR(
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False
+        )
 
-    def recognize(self, value) -> str | None:
+        self.allowed_pattern = re.compile(r"[^A-Z0-9]")
 
-        if not (result := self.reader.recognize(value)):
+    def preprocess(self, img: np.ndarray) -> np.ndarray:
+        if img is None or img.size == 0:
+            raise ValueError("Empty image crop")
+
+        # resize
+        img = cv2.resize(
+            img,
+            (320, 64),
+            interpolation=cv2.INTER_CUBIC
+        )
+
+        # grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # denoise
+        gray = cv2.bilateralFilter(gray, 9, 75, 75)
+
+        # contrast enhancement
+        clahe = cv2.createCLAHE(
+            clipLimit=2.0,
+            tileGridSize=(8, 8)
+        )
+        gray = clahe.apply(gray)
+
+        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+    def postprocess(self, text: str) -> str:
+        text = text.upper()
+        text = self.allowed_pattern.sub("", text)
+
+        return text.strip()
+
+    def recognize(self, crop: np.ndarray) -> str | None:
+        if crop is None or crop.size == 0:
             return None
-        if not (result := [r for r in result if r[2] > 0.4]):
-            return None
-        result.sort(key=lambda x: x[0][0][0])
-        text = ''.join([r[1] for r in result])
-        return text.strip().upper()
 
+        img = self.preprocess(crop)
+
+        result = self.ocr.ocr(img)
+
+        if not result:
+            return None
+
+        data = result[0]
+
+        rec_texts = data.get("rec_texts", [])
+        rec_scores = data.get("rec_scores", [])
+
+        if not rec_texts:
+            return None
+
+        filtered = []
+
+        for text, confidence in zip(rec_texts, rec_scores):
+            if confidence >= 0.5:
+                filtered.append(text)
+
+        if not filtered:
+            return None
+
+        raw_text = "".join(filtered)
+
+        return self.postprocess(raw_text)

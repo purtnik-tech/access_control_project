@@ -8,5 +8,4 @@ from camera_stream import views
 # либо URLResolver (включает другие URL-конфигурации)
 urlpatterns = [
     path('stream/', views.camera_stream_view, name='camera_stream'),
-    path('tst/', views.tst, name='frame'),
 ]
