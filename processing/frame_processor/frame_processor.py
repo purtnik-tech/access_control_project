@@ -61,31 +61,14 @@ class BaseFrameProcessor:
     def _handle(self):
 
         while self._running:
-
             frame = self.camera.frame
-
             if frame is None:
                 sleep(0.1)
                 continue
-
             try:
-                lag = (
-                    time()
-                    - self.camera.last_frame_time
-                )
-
-                logger.debug(
-                    f"Frame lag: "
-                    f"{lag:.3f}s"
-                )
-
                 self.frame_analyzer.process(frame)
-
-            except Exception:
-                logger.exception(
-                    "Ошибка обработки кадра"
-                )
-
+            except Exception as  e:
+                logger.exception(f"Ошибка {e.__class__.__name__} обработки кадра: {e}")
             sleep(self._mode.value)
 
     def loop(self):

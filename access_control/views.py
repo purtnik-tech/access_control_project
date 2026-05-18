@@ -4,6 +4,7 @@
 изображения, JSON данные и MJPEG видеопотоки.
 """
 
+import requests
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, HttpResponse, JsonResponse
 from django.views.decorators import gzip

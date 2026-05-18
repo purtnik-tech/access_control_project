@@ -1,56 +1,45 @@
 import os
+from abc import abstractmethod, ABC
+from typing import Any
+
 import cv2
 import threading
 import time
 import logging
 
+from pathlib import Path
+
 import numpy as np
 
-
 logger = logging.getLogger(__name__)
-
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-    "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay"
-)
-
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay"
 EMPTY_FRAME_LIMIT = 5
 
 
-class CameraStream:
-    def __init__(
-        self,
-        url: str,
-        frame_width: int = 640,
-        frame_height: int = 480,
-        jpeg_quality: int = 80,
-    ):
+class CameraABC(ABC):
+
+    def __init__(self, url: str | Path, frame_width: int = 640, frame_height: int = 480, **kwargs):
         self.url = url
         self.frame_width = frame_width
         self.frame_height = frame_height
-        self.jpeg_quality = jpeg_quality
         self.cap = None
         self._frame = None
-        self._jpeg_frame = None
         self.running = True
         self.lock = threading.Lock()
         self.capture_lock = threading.RLock()
-        self.last_frame_time = time.time()
         self._connect()
         self.thread = threading.Thread(target=self._update, daemon=True, name="camera-stream-thread")
         self.thread.start()
-        self.grub = True
 
     @property
-    def frame(self) -> np.ndarray | None:
+    def frame(self) -> np.ndarray | None | bytes:
         with self.lock:
             if self._frame is None:
                 return None
-            return self._frame.copy()
-
-    @property
-    def jpeg_frame(self) -> bytes | None:
-        with self.lock:
-            return self._jpeg_frame
+            try:
+                return self._frame.copy()
+            except AttributeError:
+                return self._frame
 
     def stop(self):
         self.running = False
@@ -72,6 +61,30 @@ class CameraStream:
             self.cap = cap
         logger.warning("Камера подключена")
 
+    @abstractmethod
+    def _read_frame(self, cap: cv2.VideoCapture) -> tuple[bool, np.ndarray]:
+        """
+
+        :param cap:
+        :return:
+        """
+
+    @classmethod
+    def _preprocess_frame(cls, frame: np.ndarray) -> Any:
+        """
+
+        :param frame:
+        :return:
+        """
+        return frame
+
+    @classmethod
+    def _set_frame(cls, frame: np.ndarray):
+        """
+
+        """
+        return frame
+
     def _update(self):
         retry_delay = 0.2
         empty_frames = 0
@@ -86,37 +99,23 @@ class CameraStream:
                 self._connect()
                 time.sleep(retry_delay)
                 continue
-            ret, frame = self.read_frame(cap)
+            ret, frame = self._read_frame(cap)
             if not ret or frame is None:
                 with self.lock:
                     self._frame = None
                     self._jpeg_frame = None
                 empty_frames += 1
-                logger.warning(
-                    f"Пустой кадр "
-                    f"{empty_frames}/"
-                    f"{EMPTY_FRAME_LIMIT}"
-                )
+                logger.warning(f"Пустой кадр {empty_frames}/{EMPTY_FRAME_LIMIT}")
                 if empty_frames >= EMPTY_FRAME_LIMIT:
-                    logger.warning(
-                        "Переподключение к камере"
-                    )
+                    logger.warning("Переподключение к камере")
                     empty_frames = 0
                     self._connect()
                 time.sleep(retry_delay)
                 continue
             empty_frames = 0
-            self.last_frame_time = time.time()
-
-            jpeg_bytes = None
-            ret_jpeg, jpeg = cv2.imencode(".jpg", frame,[cv2.IMWRITE_JPEG_QUALITY,self.jpeg_quality])
-
-            if ret_jpeg:
-                jpeg_bytes = jpeg.tobytes()
-
+            frame = self._preprocess_frame(frame)
             with self.lock:
-                self._frame = frame
-                self._jpeg_frame = jpeg_bytes
+                self._frame = self._set_frame(frame)
 
             fps_counter += 1
             now = time.time()
@@ -125,9 +124,24 @@ class CameraStream:
                 fps_counter = 0
                 fps_start = now
 
-    def read_frame(self, cap: cv2.VideoCapture, grab_value: int = 10):
+
+class CameraStream(CameraABC):
+
+    def _read_frame(self, cap: cv2.VideoCapture):
+        return cap.read()
+
+    def _preprocess_frame(self, frame: np.ndarray) -> bytes | None:
+        ret_jpeg, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if ret_jpeg:
+            return jpeg.tobytes()
+        return None
+
+
+class CameraStreamOCR(CameraABC):
+
+    def _read_frame(self, cap: cv2.VideoCapture):
         grabbed = False
-        for _ in range(grab_value):
+        for _ in range(10):
             grabbed = cap.grab()
         if not grabbed:
             return False, None

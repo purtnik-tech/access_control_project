@@ -15,7 +15,7 @@ class YoloDetector:
         logger.info(f'Yolo модель: {self.model.names}')
 
     def detect(self, frame: np.ndarray) -> tuple[np.ndarray, float] | None:
-        results = self.model(frame, conf=0.5)
+        results = self.model(frame, conf=0.4)
         result = results[0]
         for r in result:
             for box in r.boxes:

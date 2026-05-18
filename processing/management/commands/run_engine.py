@@ -14,5 +14,5 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         analyzer = YoloFrameAnalyzer(YoloDetector(LICENSE_PLATE_DETECT_MODEL_PATH), LicensePlateOCR())
-        processor = FrameProcessor(get_camera(), analyzer, FrameProcessor.Mode.FAST)
+        processor = FrameProcessor(get_camera(True), analyzer, FrameProcessor.Mode.FAST)
         processor.loop()
