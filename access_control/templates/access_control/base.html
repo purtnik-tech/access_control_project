@@ -1,0 +1,26 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Контроль доступа{% endblock %}</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f8f9fa; }
+        .container { max-width: 900px; margin: auto; }
+        .video-box { position: relative; margin-bottom: 15px; }
+        .plate-display { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 5px 15px; border-radius: 4px; font-size: 1.5em; }
+        .controls { display: flex; gap: 10px; margin: 10px 0; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; color: white; cursor: pointer; }
+        .btn-primary { background: #007bff; }
+        .btn-success { background: #28a745; }
+        .btn-danger { background: #dc3545; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .server-logs { background: #2d2d2d; color: #0f0; padding: 15px; height: 300px; overflow-y: auto; font-family: monospace; }
+        .message { margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    {% block content %}{% endblock %}
+</body>
+</html>

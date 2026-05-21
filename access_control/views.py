@@ -1,97 +1,110 @@
-"""
-Представления (views) для системы контроля доступа.
-Обрабатывают HTTP-запросы и возвращают ответы: HTML страницы,
-изображения, JSON данные и MJPEG видеопотоки.
-"""
-
-import requests
-from django.shortcuts import render
-from django.http import StreamingHttpResponse, HttpResponse, JsonResponse
-from django.views.decorators import gzip
+import json
 import time
 import threading
-from typing import Optional, Generator, Dict, Any, List
+from datetime import date
+from typing import Optional
 
-from .camera_stream import CameraStream
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.http import JsonResponse, StreamingHttpResponse
+from django.views.decorators.csrf import csrf_exempt
 
-# Глобальные переменные для управления единственным экземпляром камеры
-_camera_stream: Optional[CameraStream] = None  # Экземпляр потока камеры
-_camera_lock: threading.Lock = threading.Lock()  # Блокировка для потокобезопасности
-_camera_initializing: bool = False  # Флаг, указывающий что камера инициализируется
+# Импорт реального класса CameraStream (файл camera_stream/camera_stream.py)
+from camera_stream.camera.service import CameraStream
+
+# Попытка импорта анализатора и процессора кадров (если их нет – будут заглушки)
+try:
+    from processing.frame_analyzer.frame_analyzer import YoloFrameAnalyzer
+except ImportError:
+    YoloFrameAnalyzer = None
+
+try:
+    from processing.frame_processor.frame_processor import FrameProcessor
+except ImportError:
+    FrameProcessor = None
+
+# Импорт моделей (AccessLog должен быть создан)
+from .models import LicensePlate, AccessLog
+
+
+# -------------------------------------------------------------------
+# Декоратор для проверки принадлежности к группе
+# -------------------------------------------------------------------
+def group_required(group_name):
+    """Разрешает доступ только пользователям из указанной группы."""
+    return user_passes_test(
+        lambda u: u.is_authenticated and u.groups.filter(name=group_name).exists()
+    )
+
+
+# -------------------------------------------------------------------
+# Потокобезопасный синглтон для камеры
+# -------------------------------------------------------------------
+_camera_stream: Optional[CameraStream] = None
+_camera_initializing: bool = False
+_camera_lock = threading.Lock()
 
 
 def get_camera_stream() -> Optional[CameraStream]:
     """
     Получение или создание экземпляра потока камеры (ленивая инициализация с синглтоном).
-
     Реализует потокобезопасный паттерн Singleton с ожиданием инициализации.
-
-    Returns:
-        Optional[CameraStream]: Экземпляр потока камеры или None в случае ошибки
-
-    Raises:
-        RuntimeError: Если не удалось инициализировать камеру в течение таймаута
     """
     global _camera_stream, _camera_initializing
 
-    # Быстрая проверка без блокировки
     if _camera_stream is not None:
         return _camera_stream
 
-    # Блокируем для потокобезопасности
     with _camera_lock:
-        # Проверяем ещё раз после получения блокировки
         if _camera_stream is not None:
             return _camera_stream
 
-        # Если камера уже инициализируется в другом потоке - ждём
         if _camera_initializing:
             print("[INFO] Ожидание инициализации камеры...")
-            for attempt in range(20):  # Максимум 20 попыток * 0.5 сек = 10 секунд
+            for _ in range(20):  # 20 * 0.5 = 10 секунд
                 time.sleep(0.5)
                 if _camera_stream is not None:
                     return _camera_stream
             print("[WARN] Таймаут ожидания инициализации камеры")
 
-        # Помечаем, что начинаем инициализацию
         _camera_initializing = True
 
         try:
-            print(f"[INFO] Инициализация камеры...")
+            print("[INFO] Инициализация камеры...")
+            camera_url = "rtsp://admin:123qweQWE@10.2.26.3:554/stream"
 
-            # URL RTSP потока камеры (замените на свой)
-            camera_url: str = "rtsp://admin:123qweQWE@10.2.26.3:554/stream"
+            # Если есть анализатор и процессор – передаём их, иначе CameraStream работает без них
+            frame_analyzer = YoloFrameAnalyzer() if YoloFrameAnalyzer else None
+            frame_processor = FrameProcessor() if FrameProcessor else None
 
-            # Создаём экземпляр потока камеры
-            _camera_stream = CameraStream(camera_source=camera_url, use_network=True)
+            _camera_stream = CameraStream(
+                camera_source=camera_url,
+                use_network=True
+            )
 
-            start_time: float = time.time()
-            timeout: int = 15  # Таймаут инициализации 15 секунд
+            start_time = time.time()
+            timeout = 15
 
-            # Запускаем инициализацию в отдельном потоке
-            def init_camera() -> None:
-                """Внутренняя функция для инициализации камеры в отдельном потоке."""
+            def init_camera():
                 try:
                     _camera_stream.start()
                 except Exception as e:
                     print(f"[ERROR] Ошибка инициализации камеры: {e}")
 
-            init_thread: threading.Thread = threading.Thread(target=init_camera)
-            init_thread.daemon = True  # Поток завершится при завершении основного
+            init_thread = threading.Thread(target=init_camera)
+            init_thread.daemon = True
             init_thread.start()
 
-            # Ожидаем завершения инициализации с таймаутом
             while time.time() - start_time < timeout:
                 time.sleep(0.5)
-                # Проверяем, открылась ли камера
                 if hasattr(_camera_stream, 'cap') and _camera_stream.cap is not None:
                     if _camera_stream.cap.isOpened():
-                        print(f"[INFO] Камера успешно инициализирована")
+                        print("[INFO] Камера успешно инициализирована")
                         _camera_initializing = False
                         return _camera_stream
 
-            # Если дошли сюда - таймаут
-            print(f"[ERROR] Таймаут инициализации камеры")
+            print("[ERROR] Таймаут инициализации камеры")
             _camera_stream = None
             _camera_initializing = False
             raise RuntimeError("Таймаут инициализации камеры")
@@ -105,251 +118,169 @@ def get_camera_stream() -> Optional[CameraStream]:
     return _camera_stream
 
 
-def index(request) -> HttpResponse:
-    """
-    Главная страница с веб-интерфейсом системы контроля доступа.
+# -------------------------------------------------------------------
+# Основные представления (видео, статус, история)
+# -------------------------------------------------------------------
+def index(request):
+    if request.user.is_authenticated:
+        if request.user.groups.filter(name='post').exists():
+            return redirect('post_dashboard')
+        elif request.user.groups.filter(name='admin').exists():
+            return redirect('admin_dashboard')
+        elif request.user.groups.filter(name='it_specialist').exists():
+            return redirect('it_dashboard')
+        return redirect('post_dashboard')
+    return redirect('login')
 
-    Args:
-        request: HTTP запрос
 
-    Returns:
-        HttpResponse: HTML страница
-    """
-    return render(request, 'access_control/index.html')
-
-
-@gzip.gzip_page
-def video_feed(request) -> StreamingHttpResponse | HttpResponse:
-    """
-    MJPEG поток для отображения live видео с камеры.
-    Используется в теге <img src="..."> для непрерывного видео.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        StreamingHttpResponse: Бесконечный MJPEG поток
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return HttpResponse(status=503)  # Service Unavailable
-
-    def generate() -> Generator[bytes, None, None]:
-        """
-        Генератор MJPEG потока.
-        Отправляет кадры как multipart/x-mixed-replace.
-        """
-        while True:
-            try:
-                # Получаем текущий кадр
-                frame: Optional[bytes] = stream.get_frame()
-                if frame is None:
-                    time.sleep(0.1)
-                    continue
-
-                # Отправляем кадр в MJPEG формате
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            except GeneratorExit:
-                # Клиент закрыл соединение
-                break
-            except Exception as e:
-                # Ошибка при отправке
-                break
-
+def video_feed(request):
+    stream = get_camera_stream()
     return StreamingHttpResponse(
-        generate(),
+        stream.generate_frames(),
         content_type='multipart/x-mixed-replace; boundary=frame'
     )
 
 
-def last_processed_frame(request) -> HttpResponse:
-    """
-    Получение последнего обработанного кадра.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        HttpResponse: JPEG изображение или 204 No Content
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return HttpResponse(status=503)
-
-    frame: Optional[bytes] = stream.get_processed_frame()
-    if frame is None:
-        return HttpResponse(status=204)  # No Content
-    return HttpResponse(frame, content_type='image/jpeg')
+def status(request):
+    stream = get_camera_stream()
+    plate = getattr(stream, 'last_recognized_plate', '')
+    return JsonResponse({'plate': plate})
 
 
-def recognition_status(request) -> JsonResponse:
-    """
-    Получение статуса последнего распознавания в формате JSON.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        JsonResponse: Статус распознавания
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return JsonResponse({'error': 'Camera not initialized'}, status=503)
-
-    status: Dict[str, str] = stream.get_status()
-    return JsonResponse(status)
-
-
-def last_successful_frame(request) -> HttpResponse:
-    """
-    Получение кадра с последним успешным распознаванием.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        HttpResponse: JPEG изображение или 204 No Content
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return HttpResponse(status=503)
-
-    successful_data: Optional[Dict[str, Any]] = stream.get_last_successful()
-    if successful_data is None or successful_data['frame'] is None:
-        return HttpResponse(status=204)
-    return HttpResponse(successful_data['frame'], content_type='image/jpeg')
-
-
-def last_successful_data(request) -> JsonResponse:
-    """
-    Получение данных последнего успешного распознавания в формате JSON.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        JsonResponse: Данные успешного распознавания
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return JsonResponse({'exists': False, 'error': 'Camera not initialized'})
-
-    successful_data: Optional[Dict[str, Any]] = stream.get_last_successful()
-    if successful_data is None:
-        return JsonResponse({'exists': False})
-
-    return JsonResponse({
-        'exists': True,
-        'plate': successful_data['plate'],
-        'access': successful_data['access'],
-        'code': successful_data['code'],
-        'time': successful_data['time']
-    })
-
-
-def recognition_history(request) -> JsonResponse:
-    """
-    Получение истории распознаваний в формате JSON.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        JsonResponse: История распознаваний
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return JsonResponse({'history': [], 'error': 'Camera not initialized'})
-
-    history: List[Dict[str, Any]] = stream.get_recognition_history()
+def recognition_history(request):
+    logs = AccessLog.objects.order_by('-timestamp')[:20]
+    history = [
+        {
+            'plate': log.plate,
+            'timestamp': log.timestamp.isoformat(),
+            'action': log.action
+        }
+        for log in logs
+    ]
     return JsonResponse({'history': history})
 
 
-def current_processing_frame(request) -> HttpResponse:
-    """
-    Получение текущего обрабатываемого кадра.
+# -------------------------------------------------------------------
+# Аутентификация
+# -------------------------------------------------------------------
+def user_login(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            if user.groups.filter(name='post').exists():
+                return redirect('post_dashboard')
+            elif user.groups.filter(name='admin').exists():
+                return redirect('admin_dashboard')
+            elif user.groups.filter(name='it_specialist').exists():
+                return redirect('it_dashboard')
+            else:
+                return redirect('post_dashboard')
+        else:
+            return render(request, 'login.html', {'error': 'Неверное имя пользователя или пароль'})
+    return render(request, 'login.html')
 
-    Args:
-        request: HTTP запрос
 
-    Returns:
-        HttpResponse: JPEG изображение или 204 No Content
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return HttpResponse(status=503)
-
-    data: Optional[Dict[str, Any]] = stream.get_current_processing()
-    if data is None or data['frame'] is None:
-        return HttpResponse(status=204)
-    return HttpResponse(data['frame'], content_type='image/jpeg')
+def user_logout(request):
+    logout(request)
+    return redirect('login')
 
 
-def current_processing_status(request) -> JsonResponse:
-    """
-    Получение статуса текущего обрабатываемого кадра в формате JSON.
+# -------------------------------------------------------------------
+# Рабочие столы (дашборды)
+# -------------------------------------------------------------------
+@login_required
+@group_required('post')
+def post_dashboard(request):
+    return render(request, 'post.html')
 
-    Args:
-        request: HTTP запрос
 
-    Returns:
-        JsonResponse: Статус текущей обработки
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return JsonResponse({
-            'plate': '',
-            'access': 'Камера не инициализирована',
-            'code': 'error'
-        })
-
-    data: Optional[Dict[str, Any]] = stream.get_current_processing()
-    if data is None:
-        return JsonResponse({
-            'plate': '',
-            'access': 'Ожидание...',
-            'code': 'processing'
-        })
-
-    return JsonResponse({
-        'plate': data['plate'],
-        'access': data['access'],
-        'code': data['code']
+@login_required
+@group_required('admin')
+def admin_dashboard(request):
+    today = date.today()
+    access_logs = AccessLog.objects.filter(timestamp__date=today).order_by('-timestamp')
+    stream = get_camera_stream()
+    current_plate = getattr(stream, 'last_recognized_plate', '')
+    return render(request, 'admin_dashboard.html', {
+        'access_logs': access_logs,
+        'current_plate': current_plate,
     })
 
 
-def processing_queue(request) -> JsonResponse:
-    """
-    Получение очереди обработанных кадров в формате JSON.
-
-    Args:
-        request: HTTP запрос
-
-    Returns:
-        JsonResponse: Очередь обработанных кадров
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return JsonResponse({'queue': []})
-
-    queue_data: List[Dict[str, Any]] = stream.get_processing_queue()
-    return JsonResponse({'queue': queue_data})
+@login_required
+@group_required('it_specialist')
+def it_dashboard(request):
+    try:
+        with open('/var/log/access_control_server.log', 'r') as f:
+            lines = f.readlines()[-100:]
+            server_logs = ''.join(lines)
+    except FileNotFoundError:
+        server_logs = 'Файл логов не найден'
+    return render(request, 'it_dashboard.html', {'server_logs': server_logs})
 
 
-def stats_info(request) -> JsonResponse:
-    """
-    Получение статистики распознаваний в формате JSON.
+# -------------------------------------------------------------------
+# AJAX-обработчики для поста охраны
+# -------------------------------------------------------------------
+@csrf_exempt
+@login_required
+@group_required('post')
+def add_pass(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            plate_number = data.get('plate', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'Некорректный запрос'}, status=400)
 
-    Args:
-        request: HTTP запрос
+        if not plate_number:
+            return JsonResponse({'status': 'Номер не указан'}, status=400)
 
-    Returns:
-        JsonResponse: Статистика распознаваний
-    """
-    stream: Optional[CameraStream] = get_camera_stream()
-    if stream is None:
-        return JsonResponse({'error': 'Camera not initialized'})
+        LicensePlate.objects.get_or_create(number=plate_number)
+        AccessLog.objects.create(plate=plate_number, action='Пропуск добавлен')
+        return JsonResponse({'status': f'Пропуск для {plate_number} добавлен'})
+    return JsonResponse({'status': 'Метод не поддерживается'}, status=405)
 
-    stats: Dict[str, int] = stream.get_stats()
-    return JsonResponse(stats)
+
+@csrf_exempt
+@login_required
+@group_required('post')
+def allow_access(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            plate_number = data.get('plate', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'Некорректный запрос'}, status=400)
+
+        if not plate_number:
+            return JsonResponse({'status': 'Номер не указан'}, status=400)
+
+        if LicensePlate.objects.filter(number=plate_number).exists():
+            AccessLog.objects.create(plate=plate_number, action='Допуск')
+            return JsonResponse({'status': f'Доступ для {plate_number} разрешён'})
+        else:
+            return JsonResponse({'status': f'Нет пропуска для {plate_number}'}, status=403)
+    return JsonResponse({'status': 'Метод не поддерживается'}, status=405)
+
+
+@csrf_exempt
+@login_required
+@group_required('post')
+def deny_access(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            plate_number = data.get('plate', '').strip()
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'Некорректный запрос'}, status=400)
+
+        if not plate_number:
+            return JsonResponse({'status': 'Номер не указан'}, status=400)
+
+        AccessLog.objects.create(plate=plate_number, action='Запрет')
+        return JsonResponse({'status': f'Доступ для {plate_number} запрещён'})
+    return JsonResponse({'status': 'Метод не поддерживается'}, status=405)

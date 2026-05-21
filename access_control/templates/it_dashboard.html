@@ -1,0 +1,13 @@
+<!-- templates/it_dashboard.html -->
+{% extends "base.html" %}
+{% block title %}ИТ-специалист{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>ИТ-специалист</h1>
+    <div class="video-box">
+        <img src="{% url 'video_feed' %}" width="640" height="480" alt="Видеопоток">
+    </div>
+    <h2>Логи сервера</h2>
+    <pre class="server-logs">{{ server_logs }}</pre>
+</div>
+{% endblock %}

@@ -9,7 +9,16 @@ from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 
 from django.utils import timezone
+from django.db import models
+from django.utils import timezone
 
+class AccessLog(models.Model):
+    plate = models.CharField(max_length=20)
+    action = models.CharField(max_length=50)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.plate} - {self.action} at {self.timestamp}"
 
 class PersonalDataModel(models.Model):
     """

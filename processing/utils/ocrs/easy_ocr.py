@@ -3,6 +3,7 @@ import numpy as np
 import re
 from paddleocr import PaddleOCR
 
+
 class LicensePlateOCR:
 
     def __init__(self):
@@ -10,6 +11,13 @@ class LicensePlateOCR:
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False
+        )
+        self.ocr = PaddleOCR(
+            rec_model_dir="C:/paddle_ocr/PaddleOCR/output/license_plate",
+            rec_char_dict_path="C:/license_plates_dataset/dict/license_dict.txt",
+            use_gpu=True,
+            rec_image_shape="3,64,320",
+            rec_algorithm="CRNN",
         )
 
         self.allowed_pattern = re.compile(r"[^A-Z0-9]")

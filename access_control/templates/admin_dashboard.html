@@ -1,0 +1,29 @@
+<!-- templates/admin_dashboard.html -->
+{% extends "base.html" %}
+{% block title %}Панель администратора{% endblock %}
+{% block content %}
+<div class="container">
+    <h1>Администратор</h1>
+    <div class="video-box">
+        <img src="{% url 'video_feed' %}" width="640" height="480" alt="Видеопоток">
+        <div id="plate" class="plate-display">Номер: {{ current_plate }}</div>
+    </div>
+    <h2>Логи доступа за сегодня</h2>
+    <table class="table">
+        <thead>
+            <tr><th>Время</th><th>Номер</th><th>Действие</th></tr>
+        </thead>
+        <tbody>
+            {% for log in access_logs %}
+            <tr>
+                <td>{{ log.timestamp|date:"H:i:s" }}</td>
+                <td>{{ log.plate }}</td>
+                <td>{{ log.action }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3">Записей пока нет</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -176,3 +176,5 @@ LOGGING = {
         "level": "INFO",
     },
 }
+
+LOGIN_URL = 'login'
