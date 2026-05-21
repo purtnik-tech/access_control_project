@@ -9,18 +9,17 @@ from paddleocr import PaddleOCR
 class LicensePlateOCR:
 
     def __init__(self):
-        rec_model_dir = os.getenv('PADDLE_OCR_REC_MODEL_DIR')
-        rec_char_dict_path = os.getenv('PADDLE_OCR_REC_CHAR_DICT_PATH')
-        if not rec_model_dir or not rec_char_dict_path:
-            raise RuntimeError(
-                'PADDLE_OCR_REC_MODEL_DIR / PADDLE_OCR_REC_CHAR_DICT_PATH не заданы в .env'
-            )
+        model_dir = os.getenv('PADDLE_OCR_REC_MODEL_DIR')
+        if not model_dir:
+            raise RuntimeError('PADDLE_OCR_REC_MODEL_DIR не задан в .env')
+        device = os.getenv('PADDLE_OCR_DEVICE', 'gpu:0')
+
         self.ocr = PaddleOCR(
-            rec_model_dir=rec_model_dir,
-            rec_char_dict_path=rec_char_dict_path,
-            use_gpu=True,
-            rec_image_shape="3,64,320",
-            rec_algorithm="CRNN",
+            text_recognition_model_dir=model_dir,
+            device=device,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
         )
 
         self.allowed_pattern = re.compile(r"[^A-Z0-9]")
