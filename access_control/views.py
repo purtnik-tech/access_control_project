@@ -235,7 +235,7 @@ def add_pass(request):
         if not plate_number:
             return JsonResponse({'status': 'Номер не указан'}, status=400)
 
-        LicensePlate.objects.get_or_create(number=plate_number)
+        LicensePlate.objects.get_or_create(plate_number=plate_number)
         AccessLog.objects.create(plate=plate_number, action='Пропуск добавлен')
         return JsonResponse({'status': f'Пропуск для {plate_number} добавлен'})
     return JsonResponse({'status': 'Метод не поддерживается'}, status=405)
@@ -255,7 +255,7 @@ def allow_access(request):
         if not plate_number:
             return JsonResponse({'status': 'Номер не указан'}, status=400)
 
-        if LicensePlate.objects.filter(number=plate_number).exists():
+        if LicensePlate.objects.filter(plate_number=plate_number).exists():
             AccessLog.objects.create(plate=plate_number, action='Допуск')
             return JsonResponse({'status': f'Доступ для {plate_number} разрешён'})
         else:
