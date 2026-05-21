@@ -15,7 +15,10 @@ class YoloDetector:
         logger.info(f'Yolo модель: {self.model.names}')
 
     def detect(self, frame: np.ndarray) -> tuple[np.ndarray, float] | None:
-        results = self.model(frame, conf=0.2)
+        # imgsz=960 — YOLO работает на более высоком разрешении кадра,
+        # чем дефолтные 640. На мелких номерах bbox получается крупнее
+        # и точнее, плата — инференс примерно в 2 раза медленнее.
+        results = self.model(frame, conf=0.2, imgsz=960)
         result = results[0]
         h, w = frame.shape[:2]
         for r in result:
