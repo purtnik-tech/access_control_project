@@ -13,17 +13,6 @@ from django.views.decorators.csrf import csrf_exempt
 # Импорт реального класса CameraStream (файл camera_stream/camera_stream.py)
 from camera_stream.camera.service import CameraStream
 
-# Попытка импорта анализатора и процессора кадров (если их нет – будут заглушки)
-try:
-    from processing.frame_analyzer.frame_analyzer import YoloFrameAnalyzer
-except ImportError:
-    YoloFrameAnalyzer = None
-
-try:
-    from processing.frame_processor.frame_processor import FrameProcessor
-except ImportError:
-    FrameProcessor = None
-
 # Импорт моделей (AccessLog должен быть создан)
 from .models import LicensePlate, AccessLog
 
@@ -74,27 +63,10 @@ def get_camera_stream() -> Optional[CameraStream]:
             print("[INFO] Инициализация камеры...")
             camera_url = "rtsp://admin:123qweQWE@10.2.26.3:554/stream"
 
-            # Если есть анализатор и процессор – передаём их, иначе CameraStream работает без них
-            frame_analyzer = YoloFrameAnalyzer() if YoloFrameAnalyzer else None
-            frame_processor = FrameProcessor() if FrameProcessor else None
-
-            _camera_stream = CameraStream(
-                camera_source=camera_url,
-                use_network=True
-            )
+            _camera_stream = CameraStream(url=camera_url)
 
             start_time = time.time()
             timeout = 15
-
-            def init_camera():
-                try:
-                    _camera_stream.start()
-                except Exception as e:
-                    print(f"[ERROR] Ошибка инициализации камеры: {e}")
-
-            init_thread = threading.Thread(target=init_camera)
-            init_thread.daemon = True
-            init_thread.start()
 
             while time.time() - start_time < timeout:
                 time.sleep(0.5)
@@ -104,16 +76,16 @@ def get_camera_stream() -> Optional[CameraStream]:
                         _camera_initializing = False
                         return _camera_stream
 
-            print("[ERROR] Таймаут инициализации камеры")
+            print("[WARN] Таймаут инициализации камеры — продолжаем без видео")
             _camera_stream = None
             _camera_initializing = False
-            raise RuntimeError("Таймаут инициализации камеры")
+            return None
 
         except Exception as e:
-            print(f"[ERROR] Ошибка при создании камеры: {e}")
+            print(f"[ERROR] Ошибка при создании камеры: {e} — продолжаем без видео")
             _camera_stream = None
             _camera_initializing = False
-            raise
+            return None
 
     return _camera_stream
 
