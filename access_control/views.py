@@ -7,7 +7,7 @@ from typing import Optional
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 # Импорт реального класса CameraStream (файл camera_stream/camera_stream.py)
@@ -107,10 +107,18 @@ def index(request):
 
 def video_feed(request):
     stream = get_camera_stream()
-    return StreamingHttpResponse(
-        stream.generate_frames(),
-        content_type='multipart/x-mixed-replace; boundary=frame'
-    )
+    if stream is None:
+        return HttpResponse(status=503)
+
+    def gen():
+        while True:
+            jpeg = stream.frame
+            if not jpeg:
+                time.sleep(0.01)
+                continue
+            yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg + b'\r\n'
+
+    return StreamingHttpResponse(gen(), content_type='multipart/x-mixed-replace; boundary=frame')
 
 
 def status(request):
