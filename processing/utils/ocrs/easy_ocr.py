@@ -1,20 +1,23 @@
+import os
+import re
+
 import cv2
 import numpy as np
-import re
 from paddleocr import PaddleOCR
 
 
 class LicensePlateOCR:
 
     def __init__(self):
+        rec_model_dir = os.getenv('PADDLE_OCR_REC_MODEL_DIR')
+        rec_char_dict_path = os.getenv('PADDLE_OCR_REC_CHAR_DICT_PATH')
+        if not rec_model_dir or not rec_char_dict_path:
+            raise RuntimeError(
+                'PADDLE_OCR_REC_MODEL_DIR / PADDLE_OCR_REC_CHAR_DICT_PATH не заданы в .env'
+            )
         self.ocr = PaddleOCR(
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False
-        )
-        self.ocr = PaddleOCR(
-            rec_model_dir="C:/paddle_ocr/PaddleOCR/output/license_plate",
-            rec_char_dict_path="C:/license_plates_dataset/dict/license_dict.txt",
+            rec_model_dir=rec_model_dir,
+            rec_char_dict_path=rec_char_dict_path,
             use_gpu=True,
             rec_image_shape="3,64,320",
             rec_algorithm="CRNN",

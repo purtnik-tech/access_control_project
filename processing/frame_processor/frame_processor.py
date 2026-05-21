@@ -66,7 +66,9 @@ class BaseFrameProcessor:
                 sleep(0.1)
                 continue
             try:
-                self.frame_analyzer.process(frame)
+                result = self.frame_analyzer.process(frame)
+                if result is not None and result.status and result.value:
+                    self.camera.last_recognized_plate = result.value
             except Exception as  e:
                 logger.exception(f"Ошибка {e.__class__.__name__} обработки кадра: {e}")
             sleep(self._mode.value)

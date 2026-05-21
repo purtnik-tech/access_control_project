@@ -1,3 +1,5 @@
+import os
+
 from django.core.management import BaseCommand
 
 from camera_stream.camera.registry import get_camera
@@ -7,12 +9,12 @@ from processing.utils.ocrs.easy_ocr import LicensePlateOCR
 from processing.utils.detectors.yolo_detector import YoloDetector
 
 
-LICENSE_PLATE_DETECT_MODEL_PATH = 'C:\\Users\\localadmin\\PycharmProjects\\access_control_project\\tools\\train\\car_license\\best.pt'
-
-
 class Command(BaseCommand):
 
     def handle(self, *args, **options):
-        analyzer = YoloFrameAnalyzer(YoloDetector(LICENSE_PLATE_DETECT_MODEL_PATH), LicensePlateOCR())
+        model_path = os.getenv('YOLO_MODEL_PATH')
+        if not model_path:
+            raise RuntimeError('YOLO_MODEL_PATH не задан в .env')
+        analyzer = YoloFrameAnalyzer(YoloDetector(model_path), LicensePlateOCR())
         processor = FrameProcessor(get_camera(True), analyzer, FrameProcessor.Mode.FAST)
         processor.loop()

@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 # Импорт реального класса CameraStream (файл camera_stream/camera_stream.py)
 from camera_stream.camera.service import CameraStream
+from camera_stream.camera.registry import get_camera
 
 # Импорт моделей (AccessLog должен быть создан)
 from .models import LicensePlate, AccessLog
@@ -122,8 +123,11 @@ def video_feed(request):
 
 
 def status(request):
-    stream = get_camera_stream()
-    plate = getattr(stream, 'last_recognized_plate', '')
+    try:
+        cam = get_camera(ocr=True)
+    except Exception:
+        cam = None
+    plate = getattr(cam, 'last_recognized_plate', '') if cam else ''
     return JsonResponse({'plate': plate})
 
 
