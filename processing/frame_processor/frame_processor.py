@@ -69,8 +69,9 @@ class BaseFrameProcessor:
                 result = self.frame_analyzer.process(frame)
                 if result is not None and result.status and result.value:
                     self.camera.last_recognized_plate = result.value
-            except Exception as  e:
-                logger.exception(f"Ошибка {e.__class__.__name__} обработки кадра: {e}")
+                    logger.info('Plate -> camera.last_recognized_plate=%r', result.value)
+            except Exception as e:
+                logger.exception('Ошибка %s обработки кадра: %s', e.__class__.__name__, e)
             sleep(self._mode.value)
 
     def loop(self):

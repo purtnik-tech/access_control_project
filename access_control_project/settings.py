@@ -166,14 +166,36 @@ STATIC_URL: str = 'static/'
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname:<7} {name}:{lineno} - {message}",
+            "style": "{",
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
     },
     "root": {
         "handlers": ["console"],
         "level": "INFO",
+    },
+    "loggers": {
+        # Это НАШ код, нам надо видеть про него всё. Включая дебаг.
+        # Если что-то сломается — без этого ты будешь сидеть и гадать
+        # как гадалка на кофейной гуще.
+        "access_control": {"level": "DEBUG", "propagate": True},
+        "processing": {"level": "DEBUG", "propagate": True},
+        "camera_stream": {"level": "DEBUG", "propagate": True},
+        # А это сторонние библиотеки которые любят насрать в лог по
+        # 50 строк на каждый чих. Затыкаем им рот — пусть пишут только
+        # реально важное (WARNING и выше). Если ты лезешь дебажить
+        # внутренности самой ultralytics — поставь DEBUG, но я тебя
+        # предупреждал.
+        "ultralytics": {"level": "WARNING", "propagate": True},
+        "paddleocr": {"level": "WARNING", "propagate": True},
     },
 }
 

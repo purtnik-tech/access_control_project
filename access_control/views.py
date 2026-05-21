@@ -1,10 +1,13 @@
 import json
+import logging
 import time
 import threading
 from datetime import date
 from typing import Optional
 
 from django.shortcuts import render, redirect
+
+logger = logging.getLogger(__name__)
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
@@ -51,18 +54,18 @@ def get_camera_stream() -> Optional[CameraStream]:
             return _camera_stream
 
         if _camera_initializing:
-            print("[INFO] Ожидание инициализации камеры...")
+            logger.info('Ожидание инициализации камеры...')
             for _ in range(20):  # 20 * 0.5 = 10 секунд
                 time.sleep(0.5)
                 if _camera_stream is not None:
                     return _camera_stream
-            print("[WARN] Таймаут ожидания инициализации камеры")
+            logger.warning('Таймаут ожидания инициализации камеры')
 
         _camera_initializing = True
 
         try:
-            print("[INFO] Инициализация камеры...")
-            camera_url = "rtsp://admin:123qweQWE@10.2.26.3:554/stream"
+            camera_url = 'rtsp://admin:123qweQWE@10.2.26.3:554/stream'
+            logger.info('Инициализация камеры: %s', camera_url)
 
             _camera_stream = CameraStream(url=camera_url)
 
@@ -73,17 +76,17 @@ def get_camera_stream() -> Optional[CameraStream]:
                 time.sleep(0.5)
                 if hasattr(_camera_stream, 'cap') and _camera_stream.cap is not None:
                     if _camera_stream.cap.isOpened():
-                        print("[INFO] Камера успешно инициализирована")
+                        logger.info('Камера успешно инициализирована')
                         _camera_initializing = False
                         return _camera_stream
 
-            print("[WARN] Таймаут инициализации камеры — продолжаем без видео")
+            logger.warning('Таймаут инициализации камеры — продолжаем без видео')
             _camera_stream = None
             _camera_initializing = False
             return None
 
-        except Exception as e:
-            print(f"[ERROR] Ошибка при создании камеры: {e} — продолжаем без видео")
+        except Exception:
+            logger.exception('Ошибка при создании камеры — продолжаем без видео')
             _camera_stream = None
             _camera_initializing = False
             return None
@@ -123,11 +126,20 @@ def video_feed(request):
 
 
 def status(request):
+    # Эта функция дёргается фронтом раз в секунду через setInterval.
+    # Всё что она делает — заглядывает в камеру и говорит "вот номер
+    # который мы только что распознали". Если ничего не распознали —
+    # пустая строка, и фронт пишет "Номер не распознан". Никакой
+    # хитрой логики тут нет, всё тупо как валенок.
     try:
         cam = get_camera(ocr=True)
     except Exception:
+        # Камера сдохла или PaddleOCR не подгрузился. Не валим запрос,
+        # просто отдаём пусто — пусть фронт показывает "не распознан".
+        logger.exception('status: не удалось получить камеру для OCR')
         cam = None
     plate = getattr(cam, 'last_recognized_plate', '') if cam else ''
+    logger.debug('status -> plate=%r', plate)
     return JsonResponse({'plate': plate})
 
 
