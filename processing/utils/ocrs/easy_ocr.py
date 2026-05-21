@@ -64,13 +64,12 @@ class LicensePlateOCR:
             logger.debug('OCR: пустой crop, выходим')
             return None
 
-        # Передаём crop "как есть" — PaddleOCR 3.x внутри сам делает resize
-        # и нормализацию по своим transform_ops из inference.yml. Наш ручной
-        # self.preprocess() делал второй resize + grayscale + CLAHE, что
-        # ломало мелкие кропы. Если когда-то понадобится — вернуть вызов
-        # self.preprocess(crop) на эту же строку.
-        img = crop
-        logger.debug('OCR: crop=%s (без ручного препроцессинга)', crop.shape)
+        # Препроцессинг даёт PaddleOCR нормальный 320x64 вход с поднятым
+        # контрастом (CLAHE) и сглаживанием (bilateralFilter). На мелких
+        # кропах (41x166 и подобных) без него confidence падает с ~0.43
+        # до ~0.08 — модель просто не различает символы. Проверено логом.
+        img = self.preprocess(crop)
+        logger.debug('OCR: crop=%s preprocessed=%s', crop.shape, img.shape)
 
         result = self.ocr.ocr(img)
         logger.debug('OCR raw result type=%s, value=%r', type(result).__name__, result)
