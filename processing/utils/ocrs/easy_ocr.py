@@ -1,9 +1,12 @@
+import logging
 import os
 import re
 
 import cv2
 import numpy as np
 from paddleocr import PaddleOCR
+
+logger = logging.getLogger(__name__)
 
 
 class LicensePlateOCR:
@@ -58,32 +61,36 @@ class LicensePlateOCR:
 
     def recognize(self, crop: np.ndarray) -> str | None:
         if crop is None or crop.size == 0:
+            logger.debug('OCR: пустой crop, выходим')
             return None
 
         img = self.preprocess(crop)
+        logger.debug('OCR: crop=%s preprocessed=%s', crop.shape, img.shape)
 
         result = self.ocr.ocr(img)
+        logger.debug('OCR raw result type=%s, value=%r', type(result).__name__, result)
 
         if not result:
+            logger.debug('OCR: пустой результат от PaddleOCR')
             return None
 
         data = result[0]
-
-        rec_texts = data.get("rec_texts", [])
-        rec_scores = data.get("rec_scores", [])
+        rec_texts = data.get("rec_texts", []) if isinstance(data, dict) else []
+        rec_scores = data.get("rec_scores", []) if isinstance(data, dict) else []
+        logger.info('OCR: rec_texts=%r rec_scores=%r', rec_texts, rec_scores)
 
         if not rec_texts:
+            logger.debug('OCR: rec_texts пуст')
             return None
 
-        filtered = []
-
-        for text, confidence in zip(rec_texts, rec_scores):
-            if confidence >= 0.5:
-                filtered.append(text)
+        filtered = [t for t, c in zip(rec_texts, rec_scores) if c >= 0.3]
+        logger.info('OCR: после фильтра conf>=0.3 -> %r', filtered)
 
         if not filtered:
+            logger.debug('OCR: все confidence ниже порога 0.3')
             return None
 
         raw_text = "".join(filtered)
-
-        return self.postprocess(raw_text)
+        result_text = self.postprocess(raw_text)
+        logger.info('OCR: postprocess(%r) -> %r', raw_text, result_text)
+        return result_text
