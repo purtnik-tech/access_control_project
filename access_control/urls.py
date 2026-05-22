@@ -3,7 +3,11 @@ from . import views
 
 urlpatterns = [
     # Основные страницы и API (существовавшие ранее)
-    path('', views.index, name='index'),
+    path('', views.ControlPanelView.as_view(), name='control_panel'),
+
+    path('license_plates/for_manual_handle/', views.licence_plates_for_manual_handle_view, name='licence_plates_for_manual_handle_view'),
+    path('license_plates/for_manual_handle/<uuid:pk>/<str:action>/', views.handle_license_plate_for_manual, name='licence_plates_for_manual_handled'),
+
     path('video_feed/', views.video_feed, name='video_feed'),
     path('status/', views.status, name='status'),
     path('recognition_history/', views.recognition_history, name='recognition_history'),

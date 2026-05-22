@@ -2,12 +2,11 @@ import threading
 import logging
 
 from enum import Enum
-from time import sleep, time
+from time import sleep
 
 from camera_stream.camera.service import CameraStream
-from processing.frame_analyzer.protocols import (
-    FrameAnalyzerProtocol
-)
+from processing.frame_analyzer.protocols import FrameAnalyzerProtocol
+from processing.handlers.protocols import FrameHandlerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +25,12 @@ class BaseFrameProcessor:
         self,
         camera: CameraStream,
         frame_analyzer: FrameAnalyzerProtocol,
-        mode: Mode = Mode.REALTIME
+        handler: FrameHandlerProtocol,
+        mode: Mode = Mode.REALTIME,
     ):
-        logger.info(
-            f'Режим обработчика: '
-            f'{mode.name}. '
-            f'Интервал: {mode.value}'
-        )
+        logger.info(f'Режим обработчика: {mode.name}. Интервал: {mode.value}')
 
+        self._handler = handler
         self.camera = camera
         self.frame_analyzer = frame_analyzer
         self._mode = mode
@@ -48,9 +45,7 @@ class BaseFrameProcessor:
 
     def run(self):
         if self._running:
-            raise RuntimeError(
-                'Процесс уже запущен'
-            )
+            raise RuntimeError('Процесс уже запущен')
 
         self._running = True
         self._thread.start()
@@ -68,8 +63,8 @@ class BaseFrameProcessor:
             try:
                 result = self.frame_analyzer.process(frame)
                 if result is not None and result.status and result.value:
-                    self.camera.last_recognized_plate = result.value
-                    logger.info('Plate -> camera.last_recognized_plate=%r', result.value)
+                    logger.debug('Plate -> camera.last_recognized_plate=%r', result.value)
+                    self._handler(result)
             except Exception as e:
                 logger.exception('Ошибка %s обработки кадра: %s', e.__class__.__name__, e)
             sleep(self._mode.value)

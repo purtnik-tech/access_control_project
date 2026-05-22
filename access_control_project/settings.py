@@ -49,7 +49,7 @@ INSTALLED_APPS: List[str] = [
     'django.contrib.staticfiles',     # Управление статическими файлами
 
     # Пользовательские приложения проекта
-    'access_control',                 # Приложение контроля доступа
+    'access_control',
     'camera_stream',
     'processing'
 ]
@@ -186,9 +186,9 @@ LOGGING = {
         # Это НАШ код, нам надо видеть про него всё. Включая дебаг.
         # Если что-то сломается — без этого ты будешь сидеть и гадать
         # как гадалка на кофейной гуще.
-        "access_control": {"level": "DEBUG", "propagate": True},
-        "processing": {"level": "DEBUG", "propagate": True},
-        "camera_stream": {"level": "DEBUG", "propagate": True},
+        "access_control": {"level": "INFO", "propagate": True},
+        "processing": {"level": "INFO", "propagate": True},
+        "camera_stream": {"level": "INFO", "propagate": True},
         # А это сторонние библиотеки которые любят насрать в лог по
         # 50 строк на каждый чих. Затыкаем им рот — пусть пишут только
         # реально важное (WARNING и выше). Если ты лезешь дебажить
@@ -196,6 +196,9 @@ LOGGING = {
         # предупреждал.
         "ultralytics": {"level": "WARNING", "propagate": True},
         "paddleocr": {"level": "WARNING", "propagate": True},
+        "paddlepaddle": {"level": "WARNING", "propagate": True},
+        "paddle": {"level": "WARNING", "propagate": True},
+        "paddlex": {"level": "WARNING", "propagate": True},
     },
 }
 

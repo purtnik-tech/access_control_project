@@ -15,16 +15,11 @@ class LicensePlateOCR:
         model_dir = os.getenv('PADDLE_OCR_REC_MODEL_DIR')
         if not model_dir:
             raise RuntimeError('PADDLE_OCR_REC_MODEL_DIR не задан в .env')
-        device = os.getenv('PADDLE_OCR_DEVICE', 'gpu:0')
+        device = os.getenv('PADDLE_OCR_DEVICE', 'gpu')
 
         self.ocr = PaddleOCR(
-            text_recognition_model_dir=model_dir,
-            device=device,
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
+            use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False, device=device
         )
-
         self.allowed_pattern = re.compile(r"[^A-Z0-9]")
 
     def preprocess(self, img: np.ndarray) -> np.ndarray:
@@ -61,7 +56,7 @@ class LicensePlateOCR:
 
     def recognize(self, crop: np.ndarray) -> str | None:
         if crop is None or crop.size == 0:
-            logger.debug('OCR: пустой crop, выходим')
+            logger.warning('OCR: пустой crop, выходим')
             return None
 
         # Препроцессинг даёт PaddleOCR нормальный 320x64 вход с поднятым
@@ -72,29 +67,30 @@ class LicensePlateOCR:
         logger.debug('OCR: crop=%s preprocessed=%s', crop.shape, img.shape)
 
         result = self.ocr.ocr(img)
-        logger.debug('OCR raw result type=%s, value=%r', type(result).__name__, result)
+
+        # logger.debug('OCR raw result type=%s, value=%r', type(result).__name__, result)
 
         if not result:
-            logger.debug('OCR: пустой результат от PaddleOCR')
+            logger.warning('OCR: пустой результат от PaddleOCR')
             return None
 
         data = result[0]
         rec_texts = data.get("rec_texts", []) if isinstance(data, dict) else []
         rec_scores = data.get("rec_scores", []) if isinstance(data, dict) else []
-        logger.info('OCR: rec_texts=%r rec_scores=%r', rec_texts, rec_scores)
+        logger.debug('OCR: rec_texts=%r rec_scores=%r', rec_texts, rec_scores)
 
         if not rec_texts:
-            logger.debug('OCR: rec_texts пуст')
+            logger.warning('OCR: rec_texts пуст')
             return None
 
         filtered = [t for t, c in zip(rec_texts, rec_scores) if c >= 0.3]
-        logger.info('OCR: после фильтра conf>=0.3 -> %r', filtered)
+        logger.debug('OCR: после фильтра conf>=0.3 -> %r', filtered)
 
         if not filtered:
-            logger.debug('OCR: все confidence ниже порога 0.3')
+            logger.warning(f'OCR: все confidence ниже порога 0.3. data={filtered}')
             return None
 
         raw_text = "".join(filtered)
         result_text = self.postprocess(raw_text)
-        logger.info('OCR: postprocess(%r) -> %r', raw_text, result_text)
+        logger.debug('OCR: postprocess(%r) -> %r', raw_text, result_text)
         return result_text

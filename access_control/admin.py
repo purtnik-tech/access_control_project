@@ -5,7 +5,9 @@
 
 from django.contrib import admin
 
-from .models import LicensePlate, Employee, Pass, Guest, Vehicle, AccessSubject
+from .models import (
+    LicensePlate, Employee, PassModel, Guest, Vehicle, AccessSubject, PassLogsModel, LicensePlateForManualHandleModel
+)
 
 
 class PassAdmin(admin.ModelAdmin):
@@ -13,7 +15,7 @@ class PassAdmin(admin.ModelAdmin):
     Настройка административного интерфейса для модели Pass (пропуски).
     Определяет, как будут отображаться, фильтроваться и искаться пропуска в админке.
     """
-    queryset = Pass.objects.select_related('subject', 'subject__employee', 'subject__guest', 'subject__license_plate').all()
+    queryset = PassModel.objects.select_related('subject', 'subject__employee', 'subject__guest', 'subject__license_plate').all()
     # Поля, отображаемые в списке объектов
     list_display: tuple = ('subject','pass_type', 'start_date', 'end_date')
     # Поля для фильтрации в правой боковой панели
@@ -58,9 +60,26 @@ class AccessSubjectAdmin(admin.ModelAdmin):
     search_help_text = 'Поиск субъекта по фамилии и гос.номеру'
 
 
+class PassLogsAdmin(admin.ModelAdmin):
+    list_display = ['content_type', 'key', 'creation_date', 'message', 'user', 'topic_id']
+    list_filter = ['creation_date', 'content_type']
+    search_fields = ['key', 'topic_id']
+    search_help_text = 'Поиск логов по ключу объекта и topic_id'
+
+
+class LicensePlateForManualHandleAdmin(admin.ModelAdmin):
+    list_display = ['license_plate', 'creation_date']
+    list_filter = ['creation_date']
+    search_fields = ['license_plate__plate_number']
+    search_help_text = 'Поиск по гос.номеру'
+
+
+
 admin.site.register(LicensePlate, LicensePlateAdmin)
 admin.site.register(Employee, EmployeeAdmin)
 admin.site.register(Guest, GuestAdmin)
 admin.site.register(Vehicle, VehicleAdmin)
 admin.site.register(AccessSubject, AccessSubjectAdmin)
-admin.site.register(Pass, PassAdmin)
+admin.site.register(PassModel, PassAdmin)
+admin.site.register(PassLogsModel, PassLogsAdmin)
+admin.site.register(LicensePlateForManualHandleModel, LicensePlateForManualHandleAdmin)

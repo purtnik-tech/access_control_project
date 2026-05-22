@@ -13,7 +13,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay"
-EMPTY_FRAME_LIMIT = 5
+EMPTY_FRAME_LIMIT = 10
 
 
 class CameraABC(ABC):
@@ -120,7 +120,7 @@ class CameraABC(ABC):
             fps_counter += 1
             now = time.time()
             if now - fps_start >= 1:
-                logger.info(f"Camera FPS: {fps_counter}")
+                logger.debug(f"Camera FPS: {fps_counter}")
                 fps_counter = 0
                 fps_start = now
 

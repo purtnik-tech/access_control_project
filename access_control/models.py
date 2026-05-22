@@ -4,13 +4,73 @@
 """
 import uuid
 
-from django.db import models
+from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 
-from django.utils import timezone
 from django.db import models
 from django.utils import timezone
+
+
+class PassLogsModel(models.Model):
+    """
+    Таблица Логов для проекта
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        verbose_name='ID',
+        db_comment='ID',
+        default=uuid.uuid4
+    )
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
+        editable=False,
+    )
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.SET_NULL,
+        verbose_name='Объект модели',
+        db_comment='Объект модели',
+        null=True,
+        blank=True
+    )
+    key = models.UUIDField(
+        blank=True,
+        null=True,
+        verbose_name='Ключ записи',
+        db_comment='Ключ записи',
+    )
+    message = models.CharField(
+        max_length=2048,
+        verbose_name='Сообщение',
+        db_comment='Сообщение',
+        null=True,
+        blank=True
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name='Пользователь',
+        db_comment='Пользователь',
+        null=True,
+        blank=True
+    )
+    topic_id = models.UUIDField(
+        blank=True,
+        null=True,
+        verbose_name='ID общего топика логов',
+        db_comment='ID общего топика логов',
+    )
+
+    class Meta:
+        db_table = 'pass_logs'
+        verbose_name = 'Лог'
+        verbose_name_plural = 'Логи'
+        ordering = ['-creation_date']
+
 
 class AccessLog(models.Model):
     plate = models.CharField(max_length=20)
@@ -177,6 +237,35 @@ class LicensePlate(models.Model):
         verbose_name_plural = 'Регистрационные номера'
 
 
+class LicensePlateForManualHandleModel(models.Model):
+    """
+    Модель данных номеров ожидающих ручной обработки
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        verbose_name='ID',
+        db_comment='ID',
+    )
+    creation_date = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата создания',
+        db_comment='Дата создания',
+    )
+    license_plate = models.OneToOneField(
+        LicensePlate,
+        on_delete=models.CASCADE,
+        verbose_name='Гос. номер',
+        db_comment='Гос. номер',
+    )
+
+    class Meta:
+        db_table = 'license_plates_for_manual_handle'
+        ordering = ['-creation_date']
+        verbose_name = 'Регистрационный номер для ручной обработки'
+        verbose_name_plural = 'Регистрационные номера для ручной обработки'
+
+
 class Vehicle(models.Model):
     """
     Модель данных транспортных средств
@@ -230,7 +319,7 @@ class Vehicle(models.Model):
         """
         :return: Наименование и модель транспортного средства
         """
-        return f'{self.brand} {self.model}'
+        return f'{self.brand} {self.model} {self.plate_number}'
 
     class Meta:
         db_table = 'vehicles'
@@ -286,7 +375,7 @@ class AccessSubject(models.Model):
         return self.vehicle.license_plate.plate_number
 
     def __str__(self) -> str:
-        return f'{self.subject}'
+        return f'{self.subject} {self.vehicle}'
 
     class Meta:
         db_table = 'access_subjects'
@@ -303,7 +392,7 @@ class AccessSubject(models.Model):
         ]
 
 
-class Pass(models.Model):
+class PassModel(models.Model):
     """
     Модель пропуска на территорию.
     Связывает автомобиль с сотрудником или гостем и определяет права доступа.

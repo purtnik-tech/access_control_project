@@ -2,15 +2,19 @@ import json
 import logging
 import time
 import threading
+import uuid
 from datetime import date
+from http import HTTPStatus
 from typing import Optional
 
-from django.shortcuts import render, redirect
+from django.contrib.contenttypes.models import ContentType
+from django.shortcuts import render, redirect, get_object_or_404
+from django.views.generic import TemplateView
 
 logger = logging.getLogger(__name__)
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
 
 # Импорт реального класса CameraStream (файл camera_stream/camera_stream.py)
@@ -18,7 +22,57 @@ from camera_stream.camera.service import CameraStream
 from camera_stream.camera.registry import get_camera
 
 # Импорт моделей (AccessLog должен быть создан)
-from .models import LicensePlate, AccessLog
+from .models import LicensePlate, AccessLog, LicensePlateForManualHandleModel, PassLogsModel
+
+
+class ControlPanelView(TemplateView):
+    """
+
+    """
+    template_name = 'access_control/control_panel.html'
+
+
+def licence_plates_for_manual_handle_view(request) -> HttpResponseNotAllowed | JsonResponse:
+    """
+
+    :param request:
+    :return:
+    """
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+    try:
+        offset = request.GET.get('offset', 20)
+    except (ValueError, TypeError):
+        offset = 20
+    queryset = LicensePlateForManualHandleModel.objects.select_related('license_plate').all()[:offset]
+    data = list(queryset.values_list('license_plate__plate_number', 'id'))
+    return JsonResponse(
+        data={'result': data},
+        status=HTTPStatus.OK
+    )
+
+
+def handle_license_plate_for_manual(request, pk: uuid.UUID, action: str):
+    """
+
+    :param request:
+    :param pk:
+    :param action:
+    :return:
+    """
+    instance = get_object_or_404(LicensePlateForManualHandleModel, pk=pk)
+    match action:
+        case 'reject':
+            message = f'Отказано во въезде для номера: {instance.license_plate.plate_number}'
+        case 'allow':
+            # Логика поднятия шлагбаума
+            message = f'Разрешён въезд вручную для номера: {instance.license_plate.plate_number}'
+        case _:
+            return JsonResponse({'error': f'Разрешённые действия: allow, reject'}, status=HTTPStatus.BAD_REQUEST)
+    content_type = ContentType.objects.get_for_model(LicensePlateForManualHandleModel)
+    PassLogsModel.objects.create(content_type=content_type, key=pk, message=message, user=request.user)
+    instance.delete()
+    return JsonResponse({'pk': pk}, status=HTTPStatus.NO_CONTENT)
 
 
 # -------------------------------------------------------------------

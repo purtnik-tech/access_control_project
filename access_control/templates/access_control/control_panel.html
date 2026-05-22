@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Панель</title>
+</head>
+<body>
+{% if not user.is_anonymous  %}
+    <div id="content">
+        <div id="camera_stream_block">
+            <div id="camera_stream_wrapper">
+                <div class="video-box">
+                    <img src="{% url 'video_feed' %}" width="640" height="480" alt="Видеопоток">
+{#                    <div id="plate" class="plate-display">Номер: {{ current_plate }}</div>#}
+                </div>
+            </div>
+        </div>
+
+        <div id="license_plates_for_manual_handle_block">
+            <div id="license_plates_for_manual_handle_wrapper">
+                <div id="license_plates_for_manual_handle_list">
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+{% else %}
+    <div>
+        <h3>Вы не авторизованы!</h3>
+    </div>
+{% endif %}
+
+<script>
+
+    async function sendResponse(url, jsonDecode = true) {
+        const response = await fetch(url)
+        if (response.ok && jsonDecode){
+            try {
+                return await response.json()
+            } catch (e) {
+                console.error(`Ошибка во время запроса по адресу: ${url}`)
+            }
+
+        }
+    }
+
+    async function loadLicensePlatesForManualHandle() {
+        const data = await sendResponse('http://127.0.0.1:8000/license_plates/for_manual_handle/')
+        if (data) {
+            await rebuildLicensePlatesForManual(data.result)
+        }
+    }
+
+    async function rebuildLicensePlatesForManual(data) {
+        licensePlatesForManualHandleList.innerHTML = ''
+        data.forEach((record) => {
+            const wrapper = document.createElement('div')
+            const div = document.createElement('div')
+            const allowButton = document.createElement('button')
+            const rejectButton = document.createElement('button')
+            div.innerHTML = record[0]
+            allowButton.innerHTML = 'Допустить'
+            allowButton.addEventListener('click', () => {
+                handleLicensePlate(record[1], true, div)
+            })
+            rejectButton.addEventListener('click', () => {
+                handleLicensePlate(record[1], false, div)
+            })
+            rejectButton.innerHTML = 'Отклонить'
+            div.appendChild(allowButton)
+            div.appendChild(rejectButton)
+            wrapper.appendChild(div)
+            licensePlatesForManualHandleList.appendChild(wrapper)
+        })
+    }
+
+    async function handleLicensePlate(licensePlateManualId, status, container) {
+        let action = status ? 'allow' : 'reject';
+        const response = await fetch(
+            `http://127.0.0.1:8000/license_plates/for_manual_handle/${licensePlateManualId}/${action}/`
+        )
+        if (response.status === 204) {
+            container.innerHTML = ''
+        }
+    }
+
+
+    const licensePlatesForManualHandleList = document.getElementById('license_plates_for_manual_handle_list')
+    loadLicensePlatesForManualHandle()
+    setInterval(loadLicensePlatesForManualHandle, 10000)
+
+</script>
+</body>
+
+</html>
