@@ -9,10 +9,11 @@ from django.db.models import Value
 from django.db.models.functions import Concat
 from django.db.transaction import atomic
 from django.shortcuts import get_object_or_404
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView, ListView, FormView
 from django.http import JsonResponse, HttpResponseNotAllowed
 
-from .forms import CreatePassForm
+from .forms import CreateGuestPassForm, CreateEmployeePassForm
 from .models import LicensePlateForManualHandleModel, PassLogsModel, PassModel, LicensePlate, Vehicle, AccessSubject
 
 logger = logging.getLogger(__name__)
@@ -41,13 +42,67 @@ class CreatePassFormView(FormView):
     """
     Представления для отображения формы создания пропуска
     """
+    success_url = reverse_lazy('access_control:passes')
+    extra_context = {'title': 'Создать пропуск'}
     template_name = 'access_control/create_pass.html'
-    form_class = CreatePassForm
-    success_url = 'access_control:passes'
+
+    @classmethod
+    def get_vehicle_data(cls, form) -> dict:
+        return {
+            'brand': form.cleaned_data.get('brand'),
+            'model': form.cleaned_data.get('model'),
+            'color': form.cleaned_data.get('color'),
+        }
+
+
+class CreateEmployeePassFormView(CreatePassFormView):
+    """
+    Представление для создания пропуска сотрудника
+    """
+    form_class = CreateEmployeePassForm
+
+    def form_valid(self, form: CreateEmployeePassForm):
+        plate_number_data = {'plate_number': form.cleaned_data.get('plate_number')}
+        vehicle_data = self.get_vehicle_data(form)
+        with atomic():
+            license_plate, _ = LicensePlate.objects.get_or_create(**plate_number_data)
+            vehicle_data.update(license_plate=license_plate)
+            vehicle, _ = Vehicle.objects.get_or_create(**vehicle_data)
+            subject = AccessSubject.objects.create(employee=form.cleaned_data.get('employee'), vehicle=vehicle)
+            PassModel.objects.create(
+                subject=subject,
+                pass_type=PassModel.TypesPass.PERMANENT,
+                start_date=form.cleaned_data.get('start_date')
+            )
+        return super().form_valid(form)
+
+
+class CreateGuestPassFormView(CreatePassFormView):
+    """
+    Представление для создания пропуска гостя
+    """
+    form_class = CreateGuestPassForm
+
+    def form_valid(self, form: CreateEmployeePassForm):
+        plate_number_data = {'plate_number': form.cleaned_data.get('plate_number')}
+        vehicle_data = self.get_vehicle_data(form)
+        with atomic():
+            license_plate, _ = LicensePlate.objects.get_or_create(**plate_number_data)
+            vehicle_data.update(license_plate=license_plate)
+            vehicle, _ = Vehicle.objects.get_or_create(**vehicle_data)
+            subject = AccessSubject.objects.create(guest=form.cleaned_data.get('guest'), vehicle=vehicle)
+            PassModel.objects.create(
+                subject=subject,
+                pass_type=PassModel.TypesPass.TEMPORARY,
+                start_date=form.cleaned_data.get('start_date'),
+                end_date=form.cleaned_data.get('end_date'),
+                cargo_type=form.cleaned_data.get('cargo_type'),
+            )
+        return super().form_valid(form)
 
 def logs_view(reqeust) -> HttpResponseNotAllowed | JsonResponse:
     """
-
+    Возвращает логи с поддержкой пагинации
     :param reqeust:
     :return:
     """
@@ -90,7 +145,7 @@ def license_plates_for_manual_handle_view(request) -> HttpResponseNotAllowed | J
 
 def handle_license_plate_for_manual(request, pk: uuid.UUID, action: str) -> JsonResponse:
     """
-
+    Выполянет логику ручной обработки номера
     :param request:
     :param pk:
     :param action:

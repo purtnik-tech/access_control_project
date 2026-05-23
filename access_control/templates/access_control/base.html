@@ -20,7 +20,8 @@
             <nav class="menu">
                 <a class="menu-item" href="{% url 'access_control:control_panel' %}">Панель управления</a>
                 <a class="menu-item" href="{% url 'access_control:passes' %}">Список пропусков</a>
-                <a class="menu-item" href="{% url 'access_control:create_pass' %}">Создать пропуск</a>
+                <a class="menu-item" href="{% url 'access_control:create_employee_pass' %}">Создать пропуск сотрудника</a>
+                <a class="menu-item" href="{% url 'access_control:create_guest_pass' %}">Создать пропуск гостя</a>
             </nav>
         </aside>
         {% endblock menu %}

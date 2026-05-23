@@ -2,20 +2,62 @@
 {% load static %}
 
 {% block link %}
-    <link rel="stylesheet" href="{% static 'access_control/css/dashboard.css'%} ">
+    <link
+        rel="stylesheet"
+        href="{% static 'access_control/css/dashboard.css' %}"
+    >
 {% endblock link %}
 
 {% block content %}
-    <div class="dashboard">
-        {{ block.super }}
+
+<div class="dashboard">
+
+    {{ block.super }}
+
+    <div class="form-page-wrapper">
+
+        <section class="pass-form-section glass-card fade-in">
+
+            <div class="section-header">
+                <h3>Регистрация пропуска</h3>
+
+                <p class="section-description">
+                    Заполните информацию для создания нового пропуска
+                </p>
+            </div>
+
             <div id="form_wrapper">
-                <form enctype="multipart/form-data" method="POST">
+
+                <form
+                    enctype="multipart/form-data"
+                    method="POST"
+                    class="modern-form"
+                >
+
                     {% csrf_token %}
-                    {{ form.as_div }}
-                    <input type="submit" value="Зарегистрировать">
+
+                    <div class="form-fields">
+                        {{ form.as_div }}
+                    </div>
+
+                    <div class="form-actions">
+
+                        <input
+                            type="submit"
+                            value="Зарегистрировать"
+                            class="btn-primary-submit"
+                        >
+
+                    </div>
+
                 </form>
 
             </div>
+
+        </section>
+
     </div>
+
+</div>
 
 {% endblock content %}
