@@ -65,20 +65,19 @@ class PassLogsModel(models.Model):
         db_comment='ID общего топика логов',
     )
 
+    @property
+    def content_type_verbose_name(self):
+        model = self.content_type.model_class()
+        if not model:
+            return self.content_type.model
+        return model._meta.verbose_name
+
     class Meta:
         db_table = 'pass_logs'
         verbose_name = 'Лог'
         verbose_name_plural = 'Логи'
         ordering = ['-creation_date']
 
-
-class AccessLog(models.Model):
-    plate = models.CharField(max_length=20)
-    action = models.CharField(max_length=50)
-    timestamp = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return f"{self.plate} - {self.action} at {self.timestamp}"
 
 class PersonalDataModel(models.Model):
     """

@@ -1,0 +1,325 @@
+<div id="logs_block">
+
+    <div class="section-header">
+        <h3>Журнал событий</h3>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="logs-table">
+
+            <thead>
+                <tr>
+                    <th>Дата создания</th>
+                    <th>Объект</th>
+                    <th>Ключ записи</th>
+                    <th>Сообщение</th>
+                    <th>Пользователь</th>
+                </tr>
+            </thead>
+
+            <tbody id="log_table_body">
+            </tbody>
+
+        </table>
+    </div>
+
+    <div
+        id="log_control_panel"
+        class="pagination"
+    >
+
+        <button
+            id="first_log_button"
+            class="btn"
+        >
+            Первая
+        </button>
+
+        <button
+            id="prev_log_button"
+            class="btn"
+        >
+            Назад
+        </button>
+
+        <span id="page_info">
+            Страница
+            <span id="current_log_page">
+                1
+            </span>
+            из
+            <span id="last_log_page">
+                1
+            </span>
+        </span>
+
+        <button
+            id="next_log_button"
+            class="btn"
+        >
+            Далее
+        </button>
+
+        <button
+            id="last_log_button"
+            class="btn"
+        >
+            Последняя
+        </button>
+
+    </div>
+
+</div>
+
+<script>
+
+    async function fetchLogs(page = 1) {
+
+        try {
+
+            const response =
+                await fetch(
+                    `/logs/?page=${page}`
+                )
+
+            if (!response.ok) {
+                throw new Error(
+                    `HTTP ${response.status}`
+                )
+            }
+
+            return await response.json()
+
+        } catch (e) {
+
+            console.error(
+                'Ошибка получения логов:',
+                e
+            )
+
+            return null
+        }
+    }
+
+
+    function rebuildButton(
+        button,
+        pageValue
+    ) {
+
+        const validPage =
+            pageValue !== null
+            && pageValue !== undefined
+
+        if (validPage) {
+
+            button.dataset.page =
+                String(pageValue)
+
+            button.disabled = false
+
+        } else {
+
+            delete button.dataset.page
+            button.disabled = true
+        }
+    }
+
+
+    async function buildLogs(
+        page = 1
+    ) {
+
+        const logsData =
+            await fetchLogs(page)
+
+        if (!logsData) {
+            return
+        }
+
+        rebuildButton(
+            firstLogButton,
+            1
+        )
+
+        rebuildButton(
+            lastLogButton,
+            logsData.last_page
+        )
+
+        rebuildButton(
+            nextLogButton,
+            logsData.next_page
+        )
+
+        rebuildButton(
+            prevLogButton,
+            logsData.prev_page
+        )
+
+        currentLogPage.textContent =
+            logsData.current_page ?? 1
+
+        currentLogPage.dataset.page =
+            String(
+                logsData.current_page ?? 1
+            )
+
+        lastLogPage.textContent =
+            logsData.last_page ?? 1
+
+        await buildTableBody(
+            logsData.result
+        )
+    }
+
+
+    async function buildTableBody(
+        data
+    ) {
+
+        logTableBody.innerHTML = ''
+
+        if (!data?.length) {
+            return
+        }
+
+        data.forEach((record) => {
+
+            const tr =
+                document.createElement('tr')
+
+            for (const field in record) {
+
+                const td =
+                    document.createElement(
+                        'td'
+                    )
+
+                if (
+                    field ===
+                    'creation_date'
+                ) {
+
+                    td.textContent =
+                        new Date(
+                            record[field]
+                        ).toLocaleString()
+
+                } else {
+
+                    td.textContent =
+                        record[field]
+                }
+
+                tr.appendChild(td)
+            }
+
+            logTableBody
+                .appendChild(tr)
+        })
+    }
+
+
+    const firstLogButton =
+        document.getElementById(
+            'first_log_button'
+        )
+
+    const nextLogButton =
+        document.getElementById(
+            'next_log_button'
+        )
+
+    const prevLogButton =
+        document.getElementById(
+            'prev_log_button'
+        )
+
+    const lastLogButton =
+        document.getElementById(
+            'last_log_button'
+        )
+
+    const logTableBody =
+        document.getElementById(
+            'log_table_body'
+        )
+
+    const currentLogPage =
+        document.getElementById(
+            'current_log_page'
+        )
+
+    const lastLogPage =
+        document.getElementById(
+            'last_log_page'
+        )
+
+
+    firstLogButton
+        .addEventListener(
+            'click',
+            () => buildLogs(1)
+        )
+
+    nextLogButton
+        .addEventListener(
+            'click',
+            () => {
+
+                const page =
+                    nextLogButton
+                        .dataset.page
+
+                if (page) {
+                    buildLogs(page)
+                }
+            }
+        )
+
+    prevLogButton
+        .addEventListener(
+            'click',
+            () => {
+
+                const page =
+                    prevLogButton
+                        .dataset.page
+
+                if (page) {
+                    buildLogs(page)
+                }
+            }
+        )
+
+    lastLogButton
+        .addEventListener(
+            'click',
+            () => {
+
+                const page =
+                    lastLogButton
+                        .dataset.page
+
+                if (page) {
+                    buildLogs(page)
+                }
+            }
+        )
+
+
+    buildLogs(1)
+
+
+    setInterval(() => {
+
+        const currentPage =
+            currentLogPage
+                .dataset.page || 1
+
+        buildLogs(currentPage)
+
+    }, 60000)
+
+</script>

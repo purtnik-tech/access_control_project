@@ -1,0 +1,41 @@
+{% extends 'access_control/base.html' %}
+{% load static %}
+
+{% block link %}
+    <link rel="stylesheet" href="{% static 'access_control/css/dashboard.css'%} ">
+{% endblock link %}
+
+{% block content %}
+    <div class="dashboard">
+        {{ block.super }}
+            <div class="table-wrapper">
+                <table class="logs-table" >
+                    <thead>
+                        <tr>
+                            <th>Дата создания</th>
+                            <th>Субъект</th>
+                            <th>Тип пропуска</th>
+                            <th>Дата начала</th>
+                            <th>Дата окончания</th>
+                            <th>Тип груза</th>
+                            <th>Время выезда</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log_table_body">
+                    {% for record in object_list %}
+                        <tr>
+                            <th>{{ record.creation_date }}</th>
+                            <th>{{ record.subject }}</th>
+                            <th>{{ record.get_pass_type_display }}</th>
+                            <th>{{ record.start_date }}</th>
+                            <th>{{ record.end_date|default:'' }}</th>
+                            <th>{{ record.cargo_type }}</th>
+                            <th>{{ record.entry_time|default:'' }}</th>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+    </div>
+
+{% endblock content %}

@@ -156,6 +156,9 @@ USE_TZ: bool = True
 
 # URL-префикс для статических файлов
 STATIC_URL: str = 'static/'
+STATICFILES_DIRS = [
+    BASE_DIR / 'access_control'
+]
 
 # Примечание: Для продакшена потребуются дополнительные настройки:
 # STATIC_ROOT - директория для сбора статических файлов

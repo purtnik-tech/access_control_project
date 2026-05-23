@@ -2,10 +2,11 @@ import logging
 from collections import Counter
 from datetime import timedelta
 
+from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
-from access_control.models import PassModel, PassLogsModel, LicensePlateForManualHandle
+from access_control.models import PassModel, PassLogsModel, LicensePlateForManualHandleModel
 from processing.frame_analyzer.frame_analyzer import AnalyzerResult
 
 
@@ -34,10 +35,21 @@ class NumberFrameHandler:
     def __init__(self, container_size: int = 7):
         self._container_size = container_size
         self._container: list[AnalyzerResult] = []
+        self._robot = None
 
     def __call__(self, result: AnalyzerResult):
         if not self.add_value(result):
             self._handle()
+
+    @property
+    def robot(self) -> User | None:
+        if self._robot is False:
+            return None
+        if robot := User.objects.filter(username='robot').first():
+            self._robot = robot
+        else:
+            self._robot = False
+        return self._robot
 
     @property
     def get_and_reset_container(self) -> list[AnalyzerResult]:
@@ -99,8 +111,7 @@ class NumberFrameHandler:
                 result.append(Counter(chars).most_common(1)[0][0])
         return ''.join(result)
 
-    @classmethod
-    def _handle_pass(cls, number: str, pass_instance: PassModel) -> bool:
+    def _handle_pass(self, number: str, pass_instance: PassModel) -> bool:
         """
 
         :param number:
@@ -110,32 +121,35 @@ class NumberFrameHandler:
         today_delta = timezone.now() - timedelta(minutes=PASS_DELAY)
         pass_model_content_type = ContentType.objects.get_for_model(PassModel)
         log_queryset = PassLogsModel.objects.filter(
-            content_type=pass_model_content_type, creation_date__gte=today_delta, key=pass_instance.id
+            content_type=pass_model_content_type, creation_date__gte=today_delta, key=pass_instance.id, user=self.robot
         )
         if pass_instance.pass_type == PassModel.TypesPass.PERMANENT and not log_queryset.exists():
             # Логика автоматического открытия шлагбаума
             PassLogsModel.objects.create(
                 content_type=pass_model_content_type,
                 message=f'Автоматическое открытие шлагбаума. Пропуск {pass_instance}',
-                key=pass_instance.id
+                key=pass_instance.id,
+                user=self.robot
             )
             return True
         elif pass_instance.pass_type == PassModel.TypesPass.TEMPORARY and not log_queryset.exists():
             result = False
-            plates_for_handle_instance, create = LicensePlateForManualHandle.objects.get_or_create(
+            plates_for_handle_instance, create = LicensePlateForManualHandleModel.objects.get_or_create(
                 license_plate=pass_instance.subject.vehicle.license_plate
             )
             if create:
                 PassLogsModel.objects.create(
-                    content_type=ContentType.objects.get_for_model(LicensePlateForManualHandle),
+                    content_type=ContentType.objects.get_for_model(LicensePlateForManualHandleModel),
                     message=f'Создана запись ручной обработки для номера {number}',
-                    key=plates_for_handle_instance.id
+                    key=plates_for_handle_instance.id,
+                    user=self.robot
                 )
                 result = True
             PassLogsModel.objects.create(
                 content_type=pass_model_content_type,
                 message=f'Требуется ручное открытие шлагбаума. Пропуск {pass_instance}',
-                key=pass_instance.id
+                key=pass_instance.id,
+                user=self.robot
             )
             return result
         else:
